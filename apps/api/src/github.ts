@@ -11,7 +11,7 @@ import {
   Repository,
   User,
 } from "@kronik/contract/model"
-import { Clock, Context, Effect, Layer, Option, Redacted, Schedule, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Option, Redacted, Result, Schedule, Schema } from "effect"
 import { HttpClient, TracerDisabledWhen, mapRequest } from "effect/unstable/http/HttpClient"
 import { bodyJsonUnsafe, empty, prependUrl } from "effect/unstable/http/HttpClientRequest"
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse"
@@ -232,7 +232,10 @@ const invalidUpstream = (detail: string) =>
     status: 502,
   })
 
-const retrySchedule = Schedule.recurs(1)
+const retrySchedule = Schedule.exponential("100 millis").pipe(
+  Schedule.jittered,
+  Schedule.upTo({ times: 1 }),
+)
 const silentObservability: Observability.Sink = { record: () => undefined }
 
 const safeHeaderInteger = (value: string | undefined): number | undefined => {
@@ -252,21 +255,27 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": configuration.githubUserAgent,
-    Authorization: `Bearer ${Redacted.value(configuration.githubToken)}`,
   }
   const request = Effect.fn("GitHub.request")(function* (
     operation: Observability.GitHubOperation,
     path: string,
     body?: unknown,
   ) {
+    const token = configuration.githubToken
+    if (Option.isNone(token))
+      return yield* Effect.fail(new ProviderFailure({ operation, kind: "status", status: 401 }))
+    const authorizedHeaders = {
+      ...headers,
+      Authorization: `Bearer ${Redacted.value(token.value)}`,
+    }
     const clock = yield* Clock.Clock
     const startedAt = yield* clock.currentTimeMillis
     const attempt = Effect.gen(function* () {
       const responseEffect =
         body === undefined
-          ? client.get(path, { headers })
+          ? client.get(path, { headers: authorizedHeaders })
           : client.post(path, {
-              headers,
+              headers: authorizedHeaders,
               body: bodyJsonUnsafe(empty, body).body,
             })
       const response = yield* responseEffect.pipe(
@@ -630,7 +639,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     const hydrated = yield* hydrateCommit(item)
     const evidence = yield* toEvidence(user, hydrated)
     const projected = CommitDomain.projectLatest(evidence)
-    if (projected._tag === "Failure") {
+    if (Result.isFailure(projected)) {
       return yield* Effect.fail(
         new ApiError.UpstreamFailure({
           type: "https://kronik.dev/problems/upstream-failure",
@@ -728,7 +737,7 @@ export const layerWithClient = (
 
 /** Construct configuration values for standalone adapter tests. */
 export const testConfiguration = {
-  githubToken: Redacted.make("kronik-test-github-token"),
+  githubToken: Option.some(Redacted.make("kronik-test-github-token")),
   cursorSecret: Option.none<Redacted.Redacted>(),
   docsUrl: new URL("http://localhost:3001"),
   githubBaseUrl: new URL("https://api.github.test"),

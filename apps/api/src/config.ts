@@ -2,8 +2,8 @@ import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted, Schem
 
 /** Runtime configuration needed by the API composition root. */
 export interface RuntimeConfiguration {
-  /** The required service-owned GitHub credential. */
-  readonly githubToken: Redacted.Redacted
+  /** The optional service-owned GitHub credential; activity requests require it. */
+  readonly githubToken: Option.Option<Redacted.Redacted>
   /** The optional cursor-signing secret reserved for later slices. */
   readonly cursorSecret: Option.Option<Redacted.Redacted>
   /** The configured documentation site used by the operational redirect. */
@@ -19,13 +19,15 @@ export class Configuration extends Context.Service<Configuration, RuntimeConfigu
   "@kronik/api/Configuration",
 ) {}
 
-/** Decode API configuration, including the required service-owned GitHub credential. */
+/** Decode API configuration without making operational routes depend on activity credentials. */
 export const configurationLayer = Layer.effect(
   Configuration,
   Effect.gen(function* () {
-    const githubToken = yield* Config.schema(
-      Schema.RedactedFromValue(Schema.NonEmptyString, { disallowEncode: true }),
-      "GITHUB_TOKEN",
+    const githubToken = yield* Config.option(
+      Config.schema(
+        Schema.RedactedFromValue(Schema.NonEmptyString, { disallowEncode: true }),
+        "GITHUB_TOKEN",
+      ),
     )
     const cursorSecret = yield* Config.option(Config.redacted("CURSOR_SECRET"))
     const docsUrl = yield* Config.url("DOCS_URL").pipe(

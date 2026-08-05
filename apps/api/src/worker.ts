@@ -75,6 +75,15 @@ export const makeWorkerResponse = (
     observability,
   })
 
+/** Build the HTTP application used by the Worker after its init configuration is read. */
+export const makeWorkerHttpEffect = Effect.fn("KronikApi.makeWorkerHttpEffect")(function* () {
+  const configuration = yield* Configuration
+  const activityCache = yield* UserActivity.CacheAwareService
+  return yield* makeHttpEffect(configuration.docsUrl, {
+    activityCacheService: activityCache,
+  })
+})
+
 export default KronikApi.make(
   {
     main: import.meta.url,
@@ -86,15 +95,11 @@ export default KronikApi.make(
     },
   },
   Effect.gen(function* () {
-    const configuration = yield* Configuration
-    const activityCache = yield* UserActivity.CacheAwareService
     const rateLimit: RateLimitClient = yield* RateLimit("KRONIK_PUBLIC_RATE_LIMIT", {
       namespaceId: "kronik-public-v1",
       simple: { limit: 60, period: 60 },
     })
-    const fetch = yield* makeHttpEffect(configuration.docsUrl, {
-      activityCacheService: activityCache,
-    })
+    const fetch = yield* makeWorkerHttpEffect()
 
     return {
       fetch: Effect.gen(function* () {
@@ -112,6 +117,8 @@ export default KronikApi.make(
       }),
     }
   }).pipe(
+    // The Worker initializer is the application composition root.
+    // oxlint-disable-next-line effecttsgo/strict-effect-provide
     Effect.provide(Layer.mergeAll(applicationRuntime, configurationRuntime, RateLimitBinding)),
   ),
 )

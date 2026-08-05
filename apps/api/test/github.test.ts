@@ -1,17 +1,23 @@
+/* oxlint-disable effecttsgo/strict-effect-provide */
+
 import { describe, expect, test } from "bun:test"
 import { Configuration } from "../src/config.js"
 import { GitHub } from "../src/github.js"
 import { Observability } from "../src/observability.js"
 import { CommitSha, GitHubUsername, IsoDate, IsoTimestamp } from "@kronik/contract/model"
 import { Effect, Layer, Option, Redacted, Schema } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 
 const sha = "0123456789abcdef0123456789abcdef01234567"
+const snapshot = Schema.decodeUnknownSync(IsoTimestamp)("2026-01-02T04:00:00Z")
+const activityFrom = Schema.decodeUnknownSync(IsoDate)("2026-01-01")
+const activityTo = Schema.decodeUnknownSync(IsoDate)("2026-01-30")
 const username = Schema.decodeUnknownSync(GitHubUsername)("MixedUser")
 const commitSha = Schema.decodeUnknownSync(CommitSha)(sha)
 const contributionFrom = "2025-01-02"
 const contributionTo = "2026-01-01"
+const streakFrom = Schema.decodeUnknownSync(IsoDate)(contributionFrom)
+const streakTo = Schema.decodeUnknownSync(IsoDate)(contributionTo)
 const contributionDays = Array.from({ length: 365 }, (_, index) => ({
   date: new Date(Date.parse(`${contributionFrom}T00:00:00Z`) + index * 86_400_000)
     .toISOString()
@@ -107,7 +113,7 @@ const fakeClient = HttpClient.make((request, url) => {
 })
 
 const configuration = {
-  githubToken: Redacted.make("kronik-test-github-token"),
+  githubToken: Option.some(Redacted.make("kronik-test-github-token")),
   cursorSecret: Option.none<Redacted.Redacted>(),
   docsUrl: new URL("http://localhost:3001"),
   githubBaseUrl: new URL("https://api.github.test"),
@@ -189,7 +195,6 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
-        const snapshot = Schema.decodeUnknownSync(IsoTimestamp)("2026-01-02T04:00:00Z")
         return yield* github.commits({
           username,
           snapshot,
@@ -213,7 +218,6 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
-        const snapshot = Schema.decodeUnknownSync(IsoTimestamp)("2026-01-02T04:00:00Z")
         return yield* github.commits({
           username,
           snapshot,
@@ -238,8 +242,8 @@ describe("GitHub adapter", () => {
         const github = yield* GitHub.Service
         return yield* github.activity({
           username,
-          from: Schema.decodeUnknownSync(IsoDate)("2026-01-01"),
-          to: Schema.decodeUnknownSync(IsoDate)("2026-01-30"),
+          from: activityFrom,
+          to: activityTo,
         })
       }).pipe(
         Effect.provide(
@@ -269,8 +273,8 @@ describe("GitHub adapter", () => {
         const github = yield* GitHub.Service
         return yield* github.activity({
           username,
-          from: Schema.decodeUnknownSync(IsoDate)("2026-01-01"),
-          to: Schema.decodeUnknownSync(IsoDate)("2026-01-30"),
+          from: activityFrom,
+          to: activityTo,
         })
       }).pipe(
         Effect.provide(
@@ -292,8 +296,8 @@ describe("GitHub adapter", () => {
         const github = yield* GitHub.Service
         return yield* github.streak({
           username,
-          from: Schema.decodeUnknownSync(IsoDate)(contributionFrom),
-          to: Schema.decodeUnknownSync(IsoDate)(contributionTo),
+          from: streakFrom,
+          to: streakTo,
         })
       }).pipe(
         Effect.provide(

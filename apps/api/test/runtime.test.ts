@@ -1,9 +1,11 @@
+/* oxlint-disable effecttsgo/strict-effect-provide */
+
 import { beforeEach, describe, expect, test } from "bun:test"
 import { CommitPage, GitHubUsername, LatestCommit } from "@kronik/contract/model"
 import { StreakRpcs } from "@kronik/contract/rpc"
 import { ActivityState, activityRuntime } from "../src/activity-object.js"
 import type { ActivityObjectState } from "../src/activity-object.js"
-import * as ActivityRpcClient from "../src/activity-rpc.js"
+import { ActivityRpcClient } from "../src/activity-rpc.js"
 import { Configuration } from "../src/config.js"
 import { Cursor } from "../src/cursor.js"
 import { GitHub } from "../src/github.js"
@@ -12,29 +14,24 @@ import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Schema, Scop
 import { RuntimeContext } from "alchemy/RuntimeContext"
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc"
 import {
+  FetchHttpClient,
   HttpClient,
-  make as makeHttpClient,
-  mapRequest as mapHttpClientRequest,
-} from "effect/unstable/http/HttpClient"
-import { fromWeb as httpClientResponseFromWeb } from "effect/unstable/http/HttpClientResponse"
-import {
+  HttpClientRequest,
+  HttpClientResponse,
   HttpServerRequest,
-  fromWeb as httpServerRequestFromWeb,
-} from "effect/unstable/http/HttpServerRequest"
-import { toWeb as httpServerResponseToWeb } from "effect/unstable/http/HttpServerResponse"
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
-import {
-  prependUrl as prependHttpClientUrl,
-  toWeb as httpClientRequestToWeb,
-} from "effect/unstable/http/HttpClientRequest"
-import { UserActivity as UserActivityService } from "../src/user-activity.js"
+  HttpServerResponse,
+} from "effect/unstable/http"
+import { UserActivity } from "../src/user-activity.js"
+
+const httpClientResponseFromWeb = HttpClientResponse.fromWeb
 
 const sha = "0123456789abcdef0123456789abcdef01234567"
+const introducedSha = "fedcba9876543210fedcba9876543210fedcba98"
 const fixedNow = Date.parse("2026-01-01T12:00:00Z")
 let currentTime = fixedNow
 let timeoutTimersEnabled = false
 const configuration = Configuration.of({
-  githubToken: Redacted.make("kronik-test-github-token"),
+  githubToken: Option.some(Redacted.make("kronik-test-github-token")),
   cursorSecret: Option.none<Redacted.Redacted>(),
   docsUrl: new URL("https://docs.example.test"),
   githubBaseUrl: new URL("https://api.github.test"),
@@ -69,10 +66,11 @@ const contributionDays = Array.from({ length: 365 }, (_, index) => ({
 }))
 
 interface FakeGitHub {
-  readonly client: HttpClient
+  readonly client: HttpClient.HttpClient
   readonly calls: {
     readonly total: () => number
     readonly searches: () => number
+    readonly graphql: () => number
     readonly pages: () => ReadonlyArray<number>
     readonly snapshots: () => ReadonlyArray<string>
   }
@@ -84,8 +82,10 @@ interface FakeGitHub {
       | "upstream"
       | "rate"
       | "authorization"
+      | "malformed-calendar"
       | "hang",
   ): void
+  readonly introduceCommit: () => void
 }
 
 const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
@@ -96,13 +96,16 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
     | "upstream"
     | "rate"
     | "authorization"
+    | "malformed-calendar"
     | "hang" = "normal"
   let total = 0
   let searches = 0
+  let graphql = 0
+  let introduced = false
   const pages: Array<number> = []
   const snapshots: Array<string> = []
 
-  const client = makeHttpClient((request, url) => {
+  const client = HttpClient.make((request, url) => {
     total += 1
     const pathname = url.pathname
     if (mode === "hang") return Effect.never
@@ -151,6 +154,9 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
             }),
           ),
         )
+      const newCommitVisible =
+        introduced && (snapshot === undefined || snapshot >= "2026-01-01T11:30:00Z")
+      const visibleSha = newCommitVisible && page === 1 ? introducedSha : sha
       return Effect.succeed(
         httpClientResponseFromWeb(
           request,
@@ -160,8 +166,8 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
               incomplete_results: false,
               items: [
                 {
-                  sha,
-                  html_url: `https://github.com/owner/repo/commit/${sha}`,
+                  sha: visibleSha,
+                  html_url: `https://github.com/owner/repo/commit/${visibleSha}`,
                   repository: {
                     full_name: "owner/repo",
                     html_url: "https://github.com/owner/repo",
@@ -175,7 +181,10 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
         ),
       )
     }
-    if (pathname === "/graphql")
+    if (pathname === "/graphql") {
+      graphql += 1
+      const calendar =
+        mode === "malformed-calendar" ? contributionDays.slice(0, 364) : contributionDays
       return Effect.succeed(
         httpClientResponseFromWeb(
           request,
@@ -186,7 +195,7 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
                   contributionsCollection: {
                     contributionCalendar: {
                       weeks: Array.from({ length: 53 }, (_, index) => ({
-                        contributionDays: contributionDays.slice(index * 7, index * 7 + 7),
+                        contributionDays: calendar.slice(index * 7, index * 7 + 7),
                       })).filter((week) => week.contributionDays.length > 0),
                     },
                   },
@@ -197,6 +206,7 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
           ),
         ),
       )
+    }
     if (pathname.endsWith("/languages"))
       return Effect.succeed(
         httpClientResponseFromWeb(
@@ -204,13 +214,16 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
           new Response(JSON.stringify({ TypeScript: 100, JavaScript: 50 }), { status: 200 }),
         ),
       )
+    const detailSha = url.pathname.endsWith(introducedSha) ? introducedSha : sha
+    const committedAt =
+      detailSha === introducedSha ? "2026-01-01T11:30:00Z" : "2026-01-01T11:00:00Z"
     return Effect.succeed(
       httpClientResponseFromWeb(
         request,
         new Response(
           JSON.stringify({
-            sha,
-            html_url: `https://github.com/owner/repo/commit/${sha}`,
+            sha: detailSha,
+            html_url: `https://github.com/owner/repo/commit/${detailSha}`,
             repository: {
               full_name: "owner/repo",
               html_url: "https://github.com/owner/repo",
@@ -218,10 +231,12 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
             commit: {
               message: "Runtime integration commit\n\nDetails",
               author: { date: "2026-01-01T10:00:00Z" },
-              committer: { date: "2026-01-01T11:00:00Z" },
+              committer: { date: committedAt },
             },
             stats: { additions: 3, deletions: 1 },
-            parents: [{ sha, html_url: `https://github.com/owner/repo/commit/${sha}` }],
+            parents: [
+              { sha: detailSha, html_url: `https://github.com/owner/repo/commit/${detailSha}` },
+            ],
           }),
           { status: 200 },
         ),
@@ -234,11 +249,15 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
     calls: {
       total: () => total,
       searches: () => searches,
+      graphql: () => graphql,
       pages: () => [...pages],
       snapshots: () => [...snapshots],
     },
     setMode(nextMode) {
       mode = nextMode
+    },
+    introduceCommit() {
+      introduced = true
     },
   }
 }
@@ -287,20 +306,23 @@ const makeCoordinatorImpl = Effect.fn("RuntimeTest.makeCoordinator")(function* (
   )
   let server = runtime.pipe(Effect.provide(Layer.succeed(Clock.Clock, clock)))
 
-  const transport = makeHttpClient((request) =>
+  const transport = HttpClient.make((request) =>
     Effect.gen(function* () {
-      const webRequest = yield* httpClientRequestToWeb(request).pipe(Effect.orDie)
+      const webRequest = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
       const webResponse = yield* Effect.scoped(
         server.pipe(
-          Effect.provideService(HttpServerRequest, httpServerRequestFromWeb(webRequest)),
-          Effect.map(httpServerResponseToWeb),
+          Effect.provideService(
+            HttpServerRequest.HttpServerRequest,
+            HttpServerRequest.fromWeb(webRequest),
+          ),
+          Effect.map(HttpServerResponse.toWeb),
         ),
       ).pipe(Effect.orDie)
-      return httpClientResponseFromWeb(request, webResponse)
+      return HttpClientResponse.fromWeb(request, webResponse)
     }),
   )
   const protocol = yield* RpcClient.makeProtocolHttp(
-    mapHttpClientRequest(transport, prependHttpClientUrl("http://local")),
+    HttpClient.mapRequest(transport, HttpClientRequest.prependUrl("http://local")),
   ).pipe(Effect.provide(RpcSerialization.layerJson))
   const client = yield* RpcClient.make(StreakRpcs).pipe(
     Effect.provide(Layer.succeed(RpcClient.Protocol, protocol)),
@@ -345,7 +367,7 @@ const runJson = (response: Response): Effect.Effect<unknown> =>
 
 const makeWebWithNamespace = (namespace: ActivityRpcClient.ActivityNamespace) =>
   Effect.gen(function* () {
-    const activityCache = yield* UserActivityService.CacheAwareService
+    const activityCache = yield* UserActivity.CacheAwareService
     return yield* makeWebHandler(new URL("https://docs.example.test"), {
       activityCacheService: activityCache,
     })
@@ -769,6 +791,287 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
     expect(result.invalidCursor.status).toBe(400)
     expect(result.authorization.status).toBe(502)
   })
+
+  test("keeps the public commit snapshot stable after a new commit appears", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+          const first = yield* Effect.promise(() =>
+            web.handler(new Request("https://api.example.test/v1/users/MixedUser/commits?limit=1")),
+          )
+          const firstPage = yield* Schema.decodeUnknownEffect(CommitPage)(
+            yield* runJson(first),
+          ).pipe(Effect.orDie)
+          const cursor = firstPage.next
+          if (cursor === null) return yield* Effect.die("The first page must have a cursor")
+          fakeGitHub.introduceCommit()
+          const continuation = yield* Effect.promise(() =>
+            web.handler(
+              new Request(
+                `https://api.example.test/v1/users/MixedUser/commits?cursor=${encodeURIComponent(cursor)}`,
+              ),
+            ),
+          )
+          const continuationPage = yield* Schema.decodeUnknownEffect(CommitPage)(
+            yield* runJson(continuation),
+          ).pipe(Effect.orDie)
+          currentTime += 1_000
+          const newSnapshot = yield* Effect.promise(() =>
+            web.handler(new Request("https://api.example.test/v1/users/MixedUser/commits?limit=1")),
+          )
+          const newSnapshotPage = yield* Schema.decodeUnknownEffect(CommitPage)(
+            yield* runJson(newSnapshot),
+          ).pipe(Effect.orDie)
+          return {
+            first: firstPage.items[0]?.sha,
+            continuation: continuationPage.items[0]?.sha,
+            newSnapshot: newSnapshotPage.items[0]?.sha,
+            snapshots: fakeGitHub.calls.snapshots(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(String(result.first)).toBe(sha)
+    expect(String(result.continuation)).toBe(sha)
+    expect(String(result.newSnapshot)).toBe(introducedSha)
+    expect(result.snapshots).toEqual([
+      "2026-01-01T12:00:00.000Z",
+      "2026-01-01T12:00:00.000Z",
+      "2026-01-01T12:00:01.000Z",
+    ])
+  })
+
+  test("coalesces summary and streak public misses independently", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+          const responses = yield* Effect.promise(() =>
+            Promise.all([
+              web.handler(new Request("https://api.example.test/v1/users/MixedUser/activity")),
+              web.handler(new Request("https://api.example.test/v1/users/mixeduser/activity")),
+              web.handler(new Request("https://api.example.test/v1/users/MixedUser/streak")),
+              web.handler(new Request("https://api.example.test/v1/users/mixeduser/streak")),
+            ]),
+          )
+          return {
+            statuses: responses.map((response) => response.status),
+            searches: fakeGitHub.calls.searches(),
+            graphql: fakeGitHub.calls.graphql(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result).toEqual({ statuses: [200, 200, 200, 200], searches: 1, graphql: 1 })
+  })
+
+  test("rejects invalid Activity Windows through the public route", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+          const paths = [
+            "?from=2026-01-01",
+            "?from=2026-01-10&to=2026-01-01",
+            "?from=2025-01-01&to=2025-04-01",
+          ]
+          const responses = yield* Effect.forEach(paths, (query) =>
+            Effect.promise(() =>
+              web.handler(
+                new Request(`https://api.example.test/v1/users/MixedUser/activity${query}`),
+              ),
+            ),
+          )
+          return {
+            statuses: responses.map((response) => response.status),
+            searches: fakeGitHub.calls.searches(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result).toEqual({ statuses: [400, 400, 400], searches: 0 })
+  })
+
+  test("projects malformed contribution calendars as public upstream failures", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          fakeGitHub.setMode("malformed-calendar")
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+          const response = yield* Effect.promise(() =>
+            web.handler(new Request("https://api.example.test/v1/users/MixedUser/streak")),
+          )
+          return { status: response.status, body: yield* runJson(response) }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result.status).toBe(502)
+    expect(result.body).toMatchObject({
+      type: "https://kronik.dev/problems/upstream-failure",
+      detail: "GitHub returned an incomplete contribution calendar",
+    })
+  })
+
+  test("applies the public unknown-user negative TTL", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          fakeGitHub.setMode("user-not-found")
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+          const first = yield* Effect.promise(() =>
+            web.handler(new Request("https://api.example.test/v1/users/MixedUser/commits/latest")),
+          )
+          currentTime += 59_999
+          yield* mixed.replace
+          const withinTtl = yield* Effect.promise(() =>
+            web.handler(new Request("https://api.example.test/v1/users/MixedUser/commits/latest")),
+          )
+          currentTime += 2
+          yield* mixed.replace
+          const afterTtl = yield* Effect.promise(() =>
+            web.handler(new Request("https://api.example.test/v1/users/MixedUser/commits/latest")),
+          )
+          return {
+            statuses: [first.status, withinTtl.status, afterTtl.status],
+            upstreamRequests: fakeGitHub.calls.total(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result).toEqual({ statuses: [404, 404, 404], upstreamRequests: 2 })
+  })
+
+  test("verifies freshness for latest, commits, summary, and streak routes", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          currentTime = fixedNow
+          const latestGitHub = makeFakeGitHub()
+          const latest = yield* makeCoordinator("mixeduser", latestGitHub)
+          const latestWeb = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(latest.client),
+          })
+          yield* Effect.promise(() =>
+            latestWeb.handler(
+              new Request("https://api.example.test/v1/users/MixedUser/commits/latest"),
+            ),
+          )
+          yield* Effect.promise(() =>
+            latestWeb.handler(
+              new Request("https://api.example.test/v1/users/MixedUser/commits/latest"),
+            ),
+          )
+          currentTime += 59_999
+          yield* latest.replace
+          yield* Effect.promise(() =>
+            latestWeb.handler(
+              new Request("https://api.example.test/v1/users/MixedUser/commits/latest"),
+            ),
+          )
+          currentTime += 2
+          yield* latest.replace
+          yield* Effect.promise(() =>
+            latestWeb.handler(
+              new Request("https://api.example.test/v1/users/MixedUser/commits/latest"),
+            ),
+          )
+
+          currentTime = fixedNow
+          const commitsGitHub = makeFakeGitHub()
+          const commits = yield* makeCoordinator("mixeduser", commitsGitHub)
+          const commitsWeb = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(commits.client),
+          })
+          const firstPageResponse = yield* Effect.promise(() =>
+            commitsWeb.handler(
+              new Request("https://api.example.test/v1/users/MixedUser/commits?limit=1"),
+            ),
+          )
+          const firstPage = yield* Schema.decodeUnknownEffect(CommitPage)(
+            yield* runJson(firstPageResponse),
+          ).pipe(Effect.orDie)
+          const cursor = firstPage.next
+          if (cursor === null) return yield* Effect.die("The first page must have a cursor")
+          const continuationUrl = `https://api.example.test/v1/users/MixedUser/commits?cursor=${encodeURIComponent(cursor)}`
+          yield* Effect.promise(() => commitsWeb.handler(new Request(continuationUrl)))
+          yield* Effect.promise(() => commitsWeb.handler(new Request(continuationUrl)))
+          currentTime += 59_999
+          yield* commits.replace
+          yield* Effect.promise(() => commitsWeb.handler(new Request(continuationUrl)))
+          currentTime += 2
+          yield* commits.replace
+          yield* Effect.promise(() => commitsWeb.handler(new Request(continuationUrl)))
+
+          currentTime = fixedNow
+          const summaryGitHub = makeFakeGitHub()
+          const summary = yield* makeCoordinator("mixeduser", summaryGitHub)
+          const summaryWeb = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(summary.client),
+          })
+          const summaryUrl = "https://api.example.test/v1/users/MixedUser/activity"
+          yield* Effect.promise(() => summaryWeb.handler(new Request(summaryUrl)))
+          yield* Effect.promise(() => summaryWeb.handler(new Request(summaryUrl)))
+          currentTime += 299_999
+          yield* summary.replace
+          yield* Effect.promise(() => summaryWeb.handler(new Request(summaryUrl)))
+          currentTime += 2
+          yield* summary.replace
+          yield* Effect.promise(() => summaryWeb.handler(new Request(summaryUrl)))
+
+          currentTime = fixedNow
+          const streakGitHub = makeFakeGitHub()
+          const streak = yield* makeCoordinator("mixeduser", streakGitHub)
+          const streakWeb = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(streak.client),
+          })
+          const streakUrl = "https://api.example.test/v1/users/MixedUser/streak"
+          yield* Effect.promise(() => streakWeb.handler(new Request(streakUrl)))
+          yield* Effect.promise(() => streakWeb.handler(new Request(streakUrl)))
+          currentTime += 299_999
+          yield* streak.replace
+          yield* Effect.promise(() => streakWeb.handler(new Request(streakUrl)))
+          currentTime += 2
+          yield* streak.replace
+          yield* Effect.promise(() => streakWeb.handler(new Request(streakUrl)))
+
+          return {
+            latest: latestGitHub.calls.searches(),
+            commits: commitsGitHub.calls.searches(),
+            summary: summaryGitHub.calls.searches(),
+            streak: streakGitHub.calls.graphql(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result).toEqual({ latest: 2, commits: 3, summary: 2, streak: 2 })
+  })
 })
 
 test.skipIf(Bun.env.KRONIK_LIVE_GITHUB !== "1" || Bun.env.GITHUB_TOKEN === undefined)(
@@ -789,7 +1092,7 @@ test.skipIf(Bun.env.KRONIK_LIVE_GITHUB !== "1" || Bun.env.GITHUB_TOKEN === undef
             Layer.provide(
               Layer.succeed(Configuration, {
                 ...configuration,
-                githubToken: Redacted.make(token),
+                githubToken: Option.some(Redacted.make(token)),
               }),
             ),
             Layer.provide(FetchHttpClient.layer),

@@ -1,26 +1,56 @@
+/* oxlint-disable effecttsgo/strict-effect-provide */
+
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit, Layer, Redacted } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { Configuration, configurationLayer, testProvider } from "../src/config.js"
+import { makeWorkerHttpEffect, makeWorkerResponse } from "../src/worker.js"
 import { makeWebHandler } from "../src/http.js"
+import { UserActivity } from "../src/user-activity.js"
 
 const docsUrl = new URL("https://docs.example.test")
 
 const withConfiguration = <A>(effect: Effect.Effect<A, never, Configuration>) =>
   effect.pipe(
     Effect.provide(
-      configurationLayer.pipe(
-        Layer.provide(
-          testProvider({
-            DOCS_URL: docsUrl.toString(),
-            GITHUB_TOKEN: "kronik-test-github-token",
-          }),
-        ),
-      ),
+      configurationLayer.pipe(Layer.provide(testProvider({ DOCS_URL: docsUrl.toString() }))),
     ),
   )
 
+const healthOnlyActivity = UserActivity.CacheAwareService.of({
+  latestCommit: () => Effect.die("not used"),
+  commits: () => Effect.die("not used"),
+  summarize: () => Effect.die("not used"),
+  streak: () => Effect.die("not used"),
+})
+
 describe("health walking skeleton", () => {
-  test("returns health without making a GitHub request", async () => {
+  test("returns health through the Worker HTTP composition without GitHub credentials", async () => {
+    const httpEffect = await Effect.runPromise(
+      Effect.scoped(
+        makeWorkerHttpEffect().pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              configurationLayer.pipe(
+                Layer.provide(testProvider({ DOCS_URL: docsUrl.toString() })),
+              ),
+              Layer.succeed(UserActivity.CacheAwareService, healthOnlyActivity),
+            ),
+          ),
+        ),
+      ),
+    )
+    const response = await makeWorkerResponse(
+      new Request("https://api.example.test/health"),
+      httpEffect,
+      true,
+      { record: () => undefined },
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: "ok" })
+  })
+
+  test("represents an absent GitHub credential without failing configuration", async () => {
     const configuration = await Effect.runPromise(
       withConfiguration(
         Effect.gen(function* () {
@@ -29,29 +59,7 @@ describe("health walking skeleton", () => {
       ),
     )
 
-    expect(Redacted.isRedacted(configuration.githubToken)).toBe(true)
-
-    const web = await Effect.runPromise(Effect.scoped(makeWebHandler(configuration.docsUrl)))
-    const response = await web.handler(new Request("https://api.example.test/health"))
-
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ status: "ok" })
-
-    await web.dispose()
-  })
-
-  test("requires a service-owned GitHub credential", async () => {
-    const exit = await Effect.runPromiseExit(
-      Effect.gen(function* () {
-        return yield* Configuration
-      }).pipe(
-        Effect.provide(
-          configurationLayer.pipe(Layer.provide(testProvider({ DOCS_URL: docsUrl.toString() }))),
-        ),
-      ),
-    )
-
-    expect(Exit.isFailure(exit)).toBe(true)
+    expect(Option.isNone(configuration.githubToken)).toBe(true)
   })
 
   test("serves the generated full contract document", async () => {
