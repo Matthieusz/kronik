@@ -616,6 +616,8 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
       }),
   })
   return yield* RpcServer.toHttpEffect(StreakRpcs).pipe(
+    // The Durable Object initializer is this RPC server's composition root.
+    // oxlint-disable-next-line effecttsgo/strict-effect-provide
     Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
   )
 })
@@ -630,7 +632,10 @@ export const ActivityObjectLive = ActivityObject.make(
         storage: durableState.storage,
       }),
     )
-    return Effect.succeed(Effect.succeed(runtime))
+    const initialized = Effect.succeed(Effect.succeed(runtime))
+    // The Durable Object API requires the nested handler effect as its initializer value.
+    // oxlint-disable-next-line effecttsgo/return-effect-in-gen
+    return initialized
   }),
 )
 
@@ -662,7 +667,7 @@ const buildCommitPage = Effect.fn("ActivityObject.buildCommitPage")(function* (
 ) {
   const items = yield* Effect.forEach(evidence.items, (item) => {
     const projected = CommitDomain.projectCommit(item)
-    if (projected._tag === "Failure") {
+    if (Result.isFailure(projected)) {
       return Effect.fail(upstreamFailure("GitHub returned unsafe change counts"))
     }
     return Effect.succeed(projected.success)
