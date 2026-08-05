@@ -62,7 +62,7 @@ export class ServiceUnavailable extends Schema.TaggedErrorClass<ServiceUnavailab
   { httpApiStatus: 503 },
 ) {}
 
-/** Every declared problem response exposed by a domain endpoint. */
+/** Every declared problem value crossing the RPC boundary. */
 export const DomainErrors = Schema.Union([
   InvalidRequest,
   InvalidCursor,
@@ -73,3 +73,46 @@ export const DomainErrors = Schema.Union([
   ServiceUnavailable,
 ])
 export type DomainErrors = typeof DomainErrors.Type
+
+const HttpInvalidRequest = Schema.Struct({ ...fields, status: Schema.Literal(400) }).annotate({
+  identifier: "InvalidRequestProblem",
+  httpApiStatus: 400,
+})
+const HttpInvalidCursor = Schema.Struct({ ...fields, status: Schema.Literal(400) }).annotate({
+  identifier: "InvalidCursorProblem",
+  httpApiStatus: 400,
+})
+const HttpUserNotFound = Schema.Struct({ ...fields, status: Schema.Literal(404) }).annotate({
+  identifier: "UserNotFoundProblem",
+  httpApiStatus: 404,
+})
+const HttpLatestCommitNotFound = Schema.Struct({ ...fields, status: Schema.Literal(404) }).annotate(
+  {
+    identifier: "LatestCommitNotFoundProblem",
+    httpApiStatus: 404,
+  },
+)
+const HttpRateLimited = Schema.Struct({
+  ...fields,
+  status: Schema.Literal(429),
+  retryAfterSeconds: Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0))),
+}).annotate({ identifier: "RateLimitedProblem", httpApiStatus: 429 })
+const HttpUpstreamFailure = Schema.Struct({ ...fields, status: Schema.Literal(502) }).annotate({
+  identifier: "UpstreamFailureProblem",
+  httpApiStatus: 502,
+})
+const HttpServiceUnavailable = Schema.Struct({ ...fields, status: Schema.Literal(503) }).annotate({
+  identifier: "ServiceUnavailableProblem",
+  httpApiStatus: 503,
+})
+
+/** Public problem projections omit internal Effect error tags. */
+export const HttpDomainErrors = [
+  HttpInvalidRequest,
+  HttpInvalidCursor,
+  HttpUserNotFound,
+  HttpLatestCommitNotFound,
+  HttpRateLimited,
+  HttpUpstreamFailure,
+  HttpServiceUnavailable,
+] as const
