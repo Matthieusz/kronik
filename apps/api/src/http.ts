@@ -357,10 +357,7 @@ const withPublicHeaders = async (
   ageSeconds: number,
   request: Request,
 ): Promise<Response> => {
-  const problem =
-    response.headers.get("content-type")?.includes("problem+json") === true
-      ? await publicProblem(response, id)
-      : response
+  const problem = await publicProblem(response, id)
   const body = await problem.clone().text()
   const headers = new Headers(problem.headers)
   if (problem.status === 429 && headers.get("retry-after") === null) {
@@ -433,7 +430,6 @@ const ProblemTags: Readonly<Record<string, Observability.ExpectedErrorTag>> = {
 const expectedErrorTag = async (
   response: Response,
 ): Promise<Observability.ExpectedErrorTag | undefined> => {
-  if (response.headers.get("content-type")?.includes("problem+json") !== true) return undefined
   let value: unknown
   try {
     value = JSON.parse(await response.clone().text())
@@ -444,6 +440,14 @@ const expectedErrorTag = async (
   const type = stringProperty(value, "type")
   return type === undefined ? undefined : ProblemTags[type]
 }
+
+const requestAbort = (request: Request): Effect.Effect<never> =>
+  Effect.callback((resume, signal) => {
+    const abort = () => resume(Effect.interrupt)
+    if (request.signal.aborted) abort()
+    else request.signal.addEventListener("abort", abort, { once: true, signal })
+    return Effect.sync(() => request.signal.removeEventListener("abort", abort))
+  })
 
 const rateLimitResponse = (): Response =>
   new Response(
@@ -542,17 +546,22 @@ export const makePublicResponse = async (
   const response = await Effect.runPromiseWith(
     Context.make(HttpServerRequest.HttpServerRequest, HttpServerRequest.fromWeb(originRequest)),
   )(
-    Effect.scoped(
-      httpEffect.pipe(
-        Effect.map(HttpServerResponse.toWeb),
-        Effect.tap((webResponse) =>
-          Effect.annotateCurrentSpan("http.response.status_code", webResponse.status),
+    request.signal.aborted
+      ? Effect.interrupt
+      : Effect.race(
+          Effect.scoped(
+            httpEffect.pipe(
+              Effect.map(HttpServerResponse.toWeb),
+              Effect.tap((webResponse) =>
+                Effect.annotateCurrentSpan("http.response.status_code", webResponse.status),
+              ),
+              Effect.withSpan("http.request", {
+                attributes: { "http.route": route, "request.id": id },
+              }),
+            ),
+          ),
+          requestAbort(request),
         ),
-        Effect.withSpan("http.request", {
-          attributes: { "http.route": route, "request.id": id },
-        }),
-      ),
-    ),
   )
   const username = canonicalUsername(response)
   const publicResponse = await finish(response, "miss", 0)

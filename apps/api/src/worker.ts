@@ -3,23 +3,20 @@ import {
   RateLimitBinding,
   type RateLimitClient,
   WorkerConfigProvider,
-  Worker as CloudflareWorker,
+  Worker,
 } from "alchemy/Cloudflare"
 import { ConfigProvider, Duration, Effect, Layer, Option } from "effect"
 import { Clock } from "effect"
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
+import { layer } from "effect/unstable/http/FetchHttpClient"
 import { ActivityObject, ActivityObjectLive } from "./activity-object.js"
-import * as ActivityRpcClient from "./activity-rpc.js"
-import { Configuration, layer } from "./config.js"
+import { activityRpcLayer } from "./activity-rpc.js"
+import { Configuration, configurationLayer } from "./config.js"
 import { Cursor } from "./cursor.js"
 import { GitHub } from "./github.js"
 import { cloudflareEdgeCache, makeHttpEffect, makePublicResponse } from "./http.js"
 import { Observability } from "./observability.js"
-import { HttpServerResponse } from "effect/unstable/http"
-import {
-  HttpServerRequest as HttpServerRequestService,
-  toWeb,
-} from "effect/unstable/http/HttpServerRequest"
+import { fromWeb } from "effect/unstable/http/HttpServerResponse"
+import { HttpServerRequest, toWeb } from "effect/unstable/http/HttpServerRequest"
 import { UserActivity } from "./user-activity.js"
 
 /* SAFETY: the Cloudflare generated RateLimit client exposes unknown channels; this adapter catches all failures and parses its result. */
@@ -45,12 +42,9 @@ const runtimeClock: Clock.Clock = {
     ),
 }
 
-const configurationRuntime = layer.pipe(Layer.provide(workerConfiguration))
+const configurationRuntime = configurationLayer.pipe(Layer.provide(workerConfiguration))
 const runtimeClockLayer = Layer.succeed(Clock.Clock, runtimeClock)
-const githubRuntime = GitHub.layer.pipe(
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(configurationRuntime),
-)
+const githubRuntime = GitHub.layer.pipe(Layer.provide(layer), Layer.provide(configurationRuntime))
 const cursorRuntime = Layer.unwrap(
   Effect.gen(function* () {
     const configuration = yield* Configuration
@@ -64,9 +58,22 @@ const cursorRuntime = Layer.unwrap(
 const activityObjectRuntime = ActivityObjectLive.pipe(
   Layer.provide(Layer.mergeAll(githubRuntime, cursorRuntime, runtimeClockLayer)),
 )
-const applicationRuntime = ActivityRpcClient.layer.pipe(Layer.provide(activityObjectRuntime))
+const applicationRuntime = activityRpcLayer.pipe(Layer.provide(activityObjectRuntime))
 
-export class KronikApi extends CloudflareWorker<KronikApi, {}, ActivityObject>()("KronikApi") {}
+export class KronikApi extends Worker<KronikApi, {}, ActivityObject>()("KronikApi") {}
+
+/** Apply the same initialized Worker edge policy used by the Cloudflare entrypoint. */
+export const makeWorkerResponse = (
+  request: Request,
+  httpEffect: Parameters<typeof makePublicResponse>[1],
+  allowed: boolean,
+  observability: Observability.Sink = Observability.consoleSink,
+): Promise<Response> =>
+  makePublicResponse(request, httpEffect, {
+    rateLimiter: { check: async () => allowed },
+    edgeCache: cloudflareEdgeCache,
+    observability,
+  })
 
 export default KronikApi.make(
   {
@@ -91,7 +98,7 @@ export default KronikApi.make(
 
     return {
       fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequestService
+        const request = yield* HttpServerRequest
         const ip = request.headers["cf-connecting-ip"] ?? "unknown"
         const decision = yield* Effect.catchCause(
           rateLimit.limit({ key: ip }).pipe(Effect.map(isRateLimitSuccess)),
@@ -99,13 +106,9 @@ export default KronikApi.make(
         )
         const webRequest = yield* toWeb(request)
         const webResponse = yield* Effect.promise(() =>
-          makePublicResponse(webRequest, fetch, {
-            rateLimiter: { check: async () => decision },
-            edgeCache: cloudflareEdgeCache,
-            observability: Observability.consoleSink,
-          }),
+          makeWorkerResponse(webRequest, fetch, decision),
         )
-        return HttpServerResponse.fromWeb(webResponse)
+        return fromWeb(webResponse)
       }),
     }
   }).pipe(
