@@ -27,6 +27,7 @@ import {
   Option,
   Result,
   Schema,
+  Scope,
 } from "effect"
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc"
 import { ActivityDomain } from "./activity-domain.js"
@@ -618,7 +619,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
   return yield* RpcServer.toHttpEffect(StreakRpcs).pipe(
     // The Durable Object initializer is this RPC server's composition root.
     // oxlint-disable-next-line effecttsgo/strict-effect-provide
-    Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
+    Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
   )
 })
 
@@ -626,16 +627,20 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
 export const ActivityObjectLive = ActivityObject.make(
   Effect.gen(function* () {
     const durableState = yield* DurableObjectState
-    const runtime = yield* activityRuntime().pipe(
+    // Cloudflare has no Durable Object deactivation hook; this instance scope owns its caches.
+    const instanceScope = yield* Scope.make()
+    const initialized = activityRuntime().pipe(
       Effect.provideService(ActivityState, {
-        objectName: durableState.id.name,
+        get objectName() {
+          return durableState.id?.name
+        },
         storage: durableState.storage,
       }),
+      Effect.provideService(Scope.Scope, instanceScope),
     )
-    const initialized = Effect.succeed(Effect.succeed(runtime))
-    // The Durable Object API requires the nested handler effect as its initializer value.
+    // The RPC Durable Object API requires the HTTP handler inside one more initializer effect.
     // oxlint-disable-next-line effecttsgo/return-effect-in-gen
-    return initialized
+    return Effect.succeed(initialized)
   }),
 )
 

@@ -323,7 +323,7 @@ const makeCoordinatorImpl = Effect.fn("RuntimeTest.makeCoordinator")(function* (
   )
   const protocol = yield* RpcClient.makeProtocolHttp(
     HttpClient.mapRequest(transport, HttpClientRequest.prependUrl("http://local")),
-  ).pipe(Effect.provide(RpcSerialization.layerJson))
+  ).pipe(Effect.provide(RpcSerialization.layerNdjson))
   const client = yield* RpcClient.make(StreakRpcs).pipe(
     Effect.provide(Layer.succeed(RpcClient.Protocol, protocol)),
   )
