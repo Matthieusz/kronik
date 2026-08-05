@@ -34,7 +34,12 @@ need GitHub credentials or real time.
       trailing-range streaks, cache policy, stale warnings, rate limits, ETags, errors, and the
       service-owned GitHub credential model.
 - [x] Runtime tests cover normalized cache identity, user isolation, persistence decoding,
-      cursor expiry, stale fallback, rate-limit behavior, request IDs, and public error projection.
+      cursor expiry, stale fallback, rate-limit behavior, request IDs, public error projection,
+      unknown-user negative-cache TTL, snapshot stability after a new commit, summary/streak
+      miss coalescing, invalid Activity Windows, malformed calendars through the public route,
+      and freshness boundaries for every activity capability.
+- [ ] An initialized Alchemy Worker test covers the real Worker init, Durable Object namespace,
+      and Rate Limit binding. The current runtime suite stops at local HTTP/RPC/activity adapters.
 - [x] Searchable generated artifacts, docs, and public problem projections contain no GitHub
       token, cursor value or payload, authorization header, or raw caller IP.
 - [x] No v1 account, caller-token, webhook, scheduled-refresh, GraphQL endpoint, generated SDK,
@@ -46,8 +51,10 @@ need GitHub credentials or real time.
 
 ## Residual risks and unsupported claims
 
-- Local integration uses deterministic fake upstream responses and local runtime adapters; it does
-  not prove Cloudflare's production edge-cache or approximate rate-limit service behavior.
+- The current integration suite uses deterministic fake upstream responses and local HTTP/RPC/
+  activity adapters; it does not boot the initialized Alchemy Worker or prove its Durable Object
+  namespace and Rate Limit binding.
+- Cloudflare's production edge-cache and approximate rate-limit service behavior remain unproven.
 - GitHub's live availability, quota, response evolution, and contribution-calendar completeness
   remain upstream risks.
 - No claim is made that streaks are all-time, activity totals are complete when coverage is
