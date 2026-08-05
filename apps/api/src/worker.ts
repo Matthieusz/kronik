@@ -1,12 +1,7 @@
-import {
-  RateLimit,
-  RateLimitBinding,
-  type RateLimitClient,
-  WorkerConfigProvider,
-  Worker,
-} from "alchemy/Cloudflare"
-import { ConfigProvider, Duration, Effect, Layer, Option } from "effect"
+import { RateLimit, RateLimitBinding, type RateLimitClient, Worker } from "alchemy/Cloudflare"
+import { Duration, Effect, Layer, Option } from "effect"
 import { Clock } from "effect"
+import type { ConfigError } from "effect/Config"
 import { layer } from "effect/unstable/http/FetchHttpClient"
 import { ActivityObject, ActivityObjectLive } from "./activity-object.js"
 import { activityRpcLayer } from "./activity-rpc.js"
@@ -21,10 +16,6 @@ import { UserActivity } from "./user-activity.js"
 
 /* SAFETY: the Cloudflare generated RateLimit client exposes unknown channels; this adapter catches all failures and parses its result. */
 /* oxlint-disable effecttsgo/any-unknown-in-error-context */
-
-const workerConfiguration = Layer.unwrap(
-  WorkerConfigProvider().pipe(Effect.map(ConfigProvider.layer)),
-)
 
 const isRateLimitSuccess = (value: unknown): boolean =>
   typeof value === "object" && value !== null && Reflect.get(value, "success") === true
@@ -42,23 +33,7 @@ const runtimeClock: Clock.Clock = {
     ),
 }
 
-const configurationRuntime = configurationLayer.pipe(Layer.provide(workerConfiguration))
 const runtimeClockLayer = Layer.succeed(Clock.Clock, runtimeClock)
-const githubRuntime = GitHub.layer.pipe(Layer.provide(layer), Layer.provide(configurationRuntime))
-const cursorRuntime = Layer.unwrap(
-  Effect.gen(function* () {
-    const configuration = yield* Configuration
-    return Option.match(configuration.cursorSecret, {
-      onNone: () =>
-        Layer.effectDiscard(Effect.die(new Error("CURSOR_SECRET is required for activity routes"))),
-      onSome: (secret) => Cursor.layerWithSecret(secret).pipe(Layer.provide(runtimeClockLayer)),
-    })
-  }),
-).pipe(Layer.provide(configurationRuntime))
-const activityObjectRuntime = ActivityObjectLive.pipe(
-  Layer.provide(Layer.mergeAll(githubRuntime, cursorRuntime, runtimeClockLayer)),
-)
-const applicationRuntime = activityRpcLayer.pipe(Layer.provide(activityObjectRuntime))
 
 export class KronikApi extends Worker<KronikApi, {}, ActivityObject>()("KronikApi") {}
 
@@ -84,17 +59,29 @@ export const makeWorkerHttpEffect = Effect.fn("KronikApi.makeWorkerHttpEffect")(
   })
 })
 
-export default KronikApi.make(
-  {
-    main: import.meta.url,
-    env: {
-      KRONIK_PUBLIC_RATE_LIMIT: RateLimit("KRONIK_PUBLIC_RATE_LIMIT", {
-        namespaceId: "kronik-public-v1",
-        simple: { limit: 60, period: 60 },
-      }),
-    },
-  },
-  Effect.gen(function* () {
+/** Build Kronik's production Worker initializer from an explicit decoded configuration layer. */
+export const makeKronikWorkerInitializer = (
+  configurationRuntime: Layer.Layer<Configuration, ConfigError>,
+) => {
+  const githubRuntime = GitHub.layer.pipe(Layer.provide(layer), Layer.provide(configurationRuntime))
+  const cursorRuntime = Layer.unwrap(
+    Effect.gen(function* () {
+      const configuration = yield* Configuration
+      return Option.match(configuration.cursorSecret, {
+        onNone: () =>
+          Layer.effectDiscard(
+            Effect.die(new Error("CURSOR_SECRET is required for activity routes")),
+          ),
+        onSome: (secret) => Cursor.layerWithSecret(secret).pipe(Layer.provide(runtimeClockLayer)),
+      })
+    }),
+  ).pipe(Layer.provide(configurationRuntime))
+  const activityObjectRuntime = ActivityObjectLive.pipe(
+    Layer.provide(Layer.mergeAll(githubRuntime, cursorRuntime, runtimeClockLayer)),
+  )
+  const applicationRuntime = activityRpcLayer.pipe(Layer.provide(activityObjectRuntime))
+
+  return Effect.gen(function* () {
     const rateLimit: RateLimitClient = yield* RateLimit("KRONIK_PUBLIC_RATE_LIMIT", {
       namespaceId: "kronik-public-v1",
       simple: { limit: 60, period: 60 },
@@ -120,5 +107,10 @@ export default KronikApi.make(
     // The Worker initializer is the application composition root.
     // oxlint-disable-next-line effecttsgo/strict-effect-provide
     Effect.provide(Layer.mergeAll(applicationRuntime, configurationRuntime, RateLimitBinding)),
-  ),
+  )
+}
+
+export default KronikApi.make(
+  { main: import.meta.url },
+  makeKronikWorkerInitializer(configurationLayer),
 )

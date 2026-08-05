@@ -1,7 +1,7 @@
 import { Stack } from "alchemy"
 import { providers, state, Website } from "alchemy/Cloudflare"
 import { Effect } from "effect"
-import { KronikApi } from "./apps/api/src/worker.js"
+import KronikApiLive, { KronikApi } from "./apps/api/src/worker.js"
 
 /** Non-deployed Alchemy declaration for the API and static documentation Workers. */
 export default Stack(
@@ -17,5 +17,9 @@ export default Stack(
     })
 
     return { api: api.url, docs: docs.url }
-  }),
+  }).pipe(
+    // This stack is the production infrastructure composition root.
+    // oxlint-disable-next-line effecttsgo/strict-effect-provide
+    Effect.provide(KronikApiLive),
+  ),
 )
