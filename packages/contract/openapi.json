@@ -1,0 +1,1073 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kronik API",
+    "version": "1.0.0",
+    "description": "Portfolio-friendly summaries of a GitHub user's public development activity."
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "operationId": "health.get",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        },
+        "description": "Report Worker liveness without probing GitHub.",
+        "summary": "Check Kronik health"
+      }
+    },
+    "/v1/users/{username}/commits": {
+      "get": {
+        "tags": [
+          "Activity"
+        ],
+        "operationId": "v1.activity.commits",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/GitHubUsername"
+            },
+            "required": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "CommitPage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitPage"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidCursorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LatestCommitNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UpstreamFailureEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ServiceUnavailableEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "List default-branch commits whose primary author GitHub resolves to the requested user.",
+        "summary": "List public commits"
+      }
+    },
+    "/v1/users/{username}/commits/latest": {
+      "get": {
+        "tags": [
+          "Activity"
+        ],
+        "operationId": "v1.activity.latestCommit",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/GitHubUsername"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "LatestCommit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestCommit"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidCursorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LatestCommitNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UpstreamFailureEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ServiceUnavailableEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the most recently committed matching public default-branch commit.",
+        "summary": "Get the latest public commit"
+      }
+    },
+    "/v1/users/{username}/activity": {
+      "get": {
+        "tags": [
+          "Activity"
+        ],
+        "operationId": "v1.activity.summary",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/GitHubUsername"
+            },
+            "required": true
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ActivitySummary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivitySummary"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidCursorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LatestCommitNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UpstreamFailureEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ServiceUnavailableEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Aggregate at most 100 matching commits and repository language bytes over an activity window.",
+        "summary": "Summarize public activity"
+      }
+    },
+    "/v1/users/{username}/streak": {
+      "get": {
+        "tags": [
+          "Activity"
+        ],
+        "operationId": "v1.activity.streak",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/GitHubUsername"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ContributionStreak",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContributionStreak"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidCursorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LatestCommitNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UpstreamFailureEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ServiceUnavailableEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Evaluate current and longest streaks over GitHub's trailing 365-day contribution calendar.",
+        "summary": "Get contribution streaks"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "GitHubUsername": {
+        "type": "string",
+        "allOf": [
+          {
+            "pattern": "^(?!-)(?!.*--)[A-Za-z0-9-]{1,39}(?<!-)$"
+          }
+        ]
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "login": {
+            "$ref": "#/components/schemas/GitHubUsername"
+          },
+          "url": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "login",
+          "url",
+          "avatarUrl"
+        ],
+        "additionalProperties": false
+      },
+      "CommitSha": {
+        "type": "string",
+        "allOf": [
+          {
+            "pattern": "^[0-9a-f]{40}$"
+          }
+        ]
+      },
+      "Repository": {
+        "type": "object",
+        "properties": {
+          "nameWithOwner": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nameWithOwner",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "IsoTimestamp": {
+        "type": "string",
+        "allOf": [
+          {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+          }
+        ]
+      },
+      "CommitParent": {
+        "type": "object",
+        "properties": {
+          "sha": {
+            "$ref": "#/components/schemas/CommitSha"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "CommitSummary": {
+        "type": "object",
+        "properties": {
+          "sha": {
+            "$ref": "#/components/schemas/CommitSha"
+          },
+          "url": {
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/Repository"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "bodyTruncated": {
+            "type": "boolean"
+          },
+          "authoredAt": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          },
+          "committedAt": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          },
+          "additions": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "deletions": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "changedLines": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "parents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitParent"
+            }
+          }
+        },
+        "required": [
+          "sha",
+          "url",
+          "repository",
+          "headline",
+          "body",
+          "bodyTruncated",
+          "authoredAt",
+          "committedAt",
+          "additions",
+          "deletions",
+          "changedLines",
+          "parents"
+        ],
+        "additionalProperties": false
+      },
+      "Cursor": {
+        "type": "string",
+        "allOf": [
+          {
+            "minLength": 1
+          }
+        ]
+      },
+      "CommitPage": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitSummary"
+            }
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cursor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cursor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user",
+          "items",
+          "previous",
+          "next"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidRequestEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidRequest"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidCursorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidCursor"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "UserNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "UserNotFound"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "LatestCommitNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "LatestCommitNotFound"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "RateLimitedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RateLimited"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              429
+            ]
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "allOf": [
+              {
+                "exclusiveMinimum": 0
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status",
+          "retryAfterSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "UpstreamFailureEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "UpstreamFailure"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "ServiceUnavailableEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ServiceUnavailable"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "LatestCommit": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "commit": {
+            "$ref": "#/components/schemas/CommitSummary"
+          }
+        },
+        "required": [
+          "user",
+          "commit"
+        ],
+        "additionalProperties": false
+      },
+      "IsoDate": {
+        "type": "string",
+        "allOf": [
+          {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        ]
+      },
+      "ActivityWindow": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/IsoDate"
+          },
+          "to": {
+            "$ref": "#/components/schemas/IsoDate"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityCoverage": {
+        "type": "object",
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "matchedCommits": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "aggregatedCommits": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          }
+        },
+        "required": [
+          "complete",
+          "matchedCommits",
+          "aggregatedCommits"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityTotals": {
+        "type": "object",
+        "properties": {
+          "commits": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "additions": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "deletions": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "changedLines": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          }
+        },
+        "required": [
+          "commits",
+          "additions",
+          "deletions",
+          "changedLines"
+        ],
+        "additionalProperties": false
+      },
+      "Language": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bytes": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "color",
+          "bytes",
+          "percentage"
+        ],
+        "additionalProperties": false
+      },
+      "ActivitySummary": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "window": {
+            "$ref": "#/components/schemas/ActivityWindow"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ActivityCoverage"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ActivityTotals"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Language"
+            }
+          },
+          "otherBytes": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          }
+        },
+        "required": [
+          "user",
+          "window",
+          "coverage",
+          "totals",
+          "languages",
+          "otherBytes"
+        ],
+        "additionalProperties": false
+      },
+      "ContributionStreak": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "from": {
+            "$ref": "#/components/schemas/IsoDate"
+          },
+          "to": {
+            "$ref": "#/components/schemas/IsoDate"
+          },
+          "currentStreak": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "longestStreak": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "user",
+          "from",
+          "to",
+          "currentStreak",
+          "longestStreak",
+          "active"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {}
+  },
+  "security": [],
+  "tags": [
+    {
+      "name": "Health"
+    },
+    {
+      "name": "Activity"
+    }
+  ]
+}
