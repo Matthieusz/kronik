@@ -65,7 +65,14 @@ describe("commit cursor authority", () => {
       Effect.gen(function* () {
         const service = yield* Cursor.Service
         const initial = yield* service.initial(username, 1)
-        const final = Cursor.Payload.make({ ...initial, position: 1_000 })
+        const final = Cursor.Payload.make({
+          version: initial.version,
+          username: initial.username,
+          snapshot: initial.snapshot,
+          pageSize: initial.pageSize,
+          position: 1_000,
+          direction: initial.direction,
+        })
         const value = yield* service.encode(final)
         return yield* service.decode(value, username)
       }).pipe(Effect.provide(cursorLayer)),

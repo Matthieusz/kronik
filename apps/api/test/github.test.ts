@@ -114,6 +114,76 @@ const configuration = {
   githubUserAgent: "kronik-test",
 }
 
+const concurrencyClient = (() => {
+  let active = 0
+  let maximum = 0
+  let languageCalls = 0
+  const client = HttpClient.make((request, url) => {
+    const response = (body: unknown) =>
+      HttpClientResponse.fromWeb(
+        request,
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "content-type": "application/json", "x-ratelimit-remaining": "4999" },
+        }),
+      )
+    if (url.pathname === "/users/MixedUser")
+      return Effect.succeed(
+        response({
+          login: "MixedUser",
+          html_url: "https://github.com/MixedUser",
+          avatar_url: "https://avatars.githubusercontent.com/u/1",
+        }),
+      )
+    if (url.pathname === "/search/commits")
+      return Effect.succeed(
+        response({
+          total_count: 25,
+          incomplete_results: false,
+          items: Array.from({ length: 25 }, (_, index) => ({
+            sha,
+            html_url: `https://github.com/owner/repo-${index}/commit/${sha}`,
+            repository: {
+              full_name: `owner/repo-${index}`,
+              html_url: `https://github.com/owner/repo-${index}`,
+            },
+            author: { login: "MixedUser" },
+          })),
+        }),
+      )
+    if (url.pathname.endsWith("/languages")) {
+      languageCalls += 1
+      active += 1
+      maximum = Math.max(maximum, active)
+      return Effect.promise(() =>
+        Promise.resolve().then(() => {
+          active -= 1
+          return response({ TypeScript: 100, JavaScript: 50 })
+        }),
+      )
+    }
+    const repository = url.pathname.split("/")[3]
+    return Effect.succeed(
+      response({
+        sha,
+        html_url: `https://github.com/owner/${repository}/commit/${sha}`,
+        repository: {
+          full_name: `owner/${repository}`,
+          html_url: `https://github.com/owner/${repository}`,
+        },
+        commit: {
+          message: "Commit",
+          author: { date: "2026-01-02T03:04:05Z" },
+          committer: { date: "2026-01-02T03:05:06Z" },
+        },
+        stats: { additions: 3, deletions: 1 },
+        parents: [],
+      }),
+    )
+  })
+  return { client, maximum: () => maximum, languageCalls: () => languageCalls }
+})()
+
 describe("GitHub adapter", () => {
   test("hydrates a stable commit page with the requested search position", async () => {
     const result = await Effect.runPromise(
@@ -191,6 +261,29 @@ describe("GitHub adapter", () => {
         ],
       },
     ])
+  })
+
+  test("bounds independent repository-language lookups at four", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const github = yield* GitHub.Service
+        return yield* github.activity({
+          username,
+          from: Schema.decodeUnknownSync(IsoDate)("2026-01-01"),
+          to: Schema.decodeUnknownSync(IsoDate)("2026-01-30"),
+        })
+      }).pipe(
+        Effect.provide(
+          GitHub.layerWithClient(concurrencyClient.client).pipe(
+            Layer.provide(Layer.succeed(Configuration, configuration)),
+          ),
+        ),
+      ),
+    )
+
+    expect(result.repositories).toHaveLength(25)
+    expect(concurrencyClient.languageCalls()).toBe(25)
+    expect(concurrencyClient.maximum()).toBeLessThanOrEqual(4)
   })
 
   test("reads a bounded contribution calendar through GraphQL", async () => {

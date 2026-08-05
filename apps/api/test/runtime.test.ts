@@ -70,7 +70,12 @@ const contributionDays = Array.from({ length: 365 }, (_, index) => ({
 
 interface FakeGitHub {
   readonly client: HttpClient
-  readonly calls: { readonly total: () => number; readonly searches: () => number }
+  readonly calls: {
+    readonly total: () => number
+    readonly searches: () => number
+    readonly pages: () => ReadonlyArray<number>
+    readonly snapshots: () => ReadonlyArray<string>
+  }
   setMode(
     mode:
       | "normal"
@@ -94,6 +99,8 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
     | "hang" = "normal"
   let total = 0
   let searches = 0
+  const pages: Array<number> = []
+  const snapshots: Array<string> = []
 
   const client = makeHttpClient((request, url) => {
     total += 1
@@ -123,6 +130,11 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
     }
     if (pathname === "/search/commits") {
       searches += 1
+      const page = Number.parseInt(url.searchParams.get("page") ?? "0", 10)
+      pages.push(page)
+      const query = url.searchParams.get("q") ?? ""
+      const snapshot = query.match(/committer-date:<=([^ ]+)/)?.[1]
+      if (snapshot !== undefined) snapshots.push(snapshot)
       if (mode === "latest-not-found")
         return Effect.succeed(
           httpClientResponseFromWeb(
@@ -219,7 +231,12 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
 
   return {
     client,
-    calls: { total: () => total, searches: () => searches },
+    calls: {
+      total: () => total,
+      searches: () => searches,
+      pages: () => [...pages],
+      snapshots: () => [...snapshots],
+    },
     setMode(nextMode) {
       mode = nextMode
     },
@@ -371,9 +388,11 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
               web.handler(new Request(`https://api.example.test/v1/users/MixedUser/${path}`)),
             ),
           )
+          const latestResponse = responses[0]
+          if (latestResponse === undefined) return yield* Effect.die("Missing latest response")
           return {
             statuses: responses.map((response) => response.status),
-            latest: yield* runJson(responses[0]!),
+            latest: yield* runJson(latestResponse),
             searches: fakeGitHub.calls.searches(),
           }
         }),
@@ -395,9 +414,11 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
             getByName: () => Effect.succeed(mixed.client),
           })
           let response = yield* Effect.promise(() =>
-            web.handler(new Request("https://api.example.test/v1/users/MixedUser/commits?limit=1")),
+            web.handler(
+              new Request("https://api.example.test/v1/users/MixedUser/commits?limit=100"),
+            ),
           )
-          for (let pageNumber = 1; pageNumber < 100; pageNumber += 1) {
+          for (let pageNumber = 1; pageNumber <= 9; pageNumber += 1) {
             const page = yield* Schema.decodeUnknownEffect(CommitPage)(
               yield* runJson(response),
             ).pipe(Effect.orDie)
@@ -414,12 +435,69 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
           const finalPage = yield* Schema.decodeUnknownEffect(CommitPage)(
             yield* runJson(response),
           ).pipe(Effect.orDie)
-          return finalPage.next
+          return { next: finalPage.next, pages: fakeGitHub.calls.pages() }
         }),
       ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
     )
 
-    expect(result).not.toBeNull()
+    expect(result.next).toBeNull()
+    expect(result.pages).toEqual(Array.from({ length: 10 }, (_, index) => index + 1))
+  })
+
+  test("navigates backward and preserves one snapshot across pages", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub(20)
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+          const first = yield* Effect.promise(() =>
+            web.handler(new Request("https://api.example.test/v1/users/MixedUser/commits?limit=1")),
+          )
+          const firstPage = yield* Schema.decodeUnknownEffect(CommitPage)(
+            yield* runJson(first),
+          ).pipe(Effect.orDie)
+          const next = firstPage.next
+          if (next === null) return yield* Effect.die("The first page must have a next cursor")
+          const second = yield* Effect.promise(() =>
+            web.handler(
+              new Request(
+                `https://api.example.test/v1/users/MixedUser/commits?cursor=${encodeURIComponent(next)}`,
+              ),
+            ),
+          )
+          const secondPage = yield* Schema.decodeUnknownEffect(CommitPage)(
+            yield* runJson(second),
+          ).pipe(Effect.orDie)
+          const previous = secondPage.previous
+          if (previous === null)
+            return yield* Effect.die("The second page must have a previous cursor")
+          const back = yield* Effect.promise(() =>
+            web.handler(
+              new Request(
+                `https://api.example.test/v1/users/MixedUser/commits?cursor=${encodeURIComponent(previous)}`,
+              ),
+            ),
+          )
+          const backPage = yield* Schema.decodeUnknownEffect(CommitPage)(yield* runJson(back)).pipe(
+            Effect.orDie,
+          )
+          return {
+            firstItems: firstPage.items,
+            backItems: backPage.items,
+            pages: fakeGitHub.calls.pages(),
+            snapshots: fakeGitHub.calls.snapshots(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result.backItems).toEqual(result.firstItems)
+    expect(result.pages).toEqual([1, 2])
+    expect(result.snapshots).toHaveLength(2)
+    expect(new Set(result.snapshots).size).toBe(1)
   })
 
   test("coalesces identical misses while different object identities progress independently", async () => {
@@ -546,16 +624,47 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
             status: response.status,
             cache: response.headers.get("x-kronik-cache"),
             warning: response.headers.get("warning"),
+            age: response.headers.get("age"),
+            cacheControl: response.headers.get("cache-control"),
+            contentType: response.headers.get("content-type"),
           }))
         }),
       ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
     )
 
     expect(result).toEqual([
-      { status: 200, cache: "stale", warning: '110 - "Response is stale"' },
-      { status: 200, cache: "stale", warning: '110 - "Response is stale"' },
-      { status: 200, cache: "stale", warning: '110 - "Response is stale"' },
-      { status: 200, cache: "stale", warning: '110 - "Response is stale"' },
+      {
+        status: 200,
+        cache: "stale",
+        warning: '110 - "Response is stale"',
+        age: "0",
+        cacheControl: "public, max-age=60, stale-while-revalidate=3600",
+        contentType: "application/json",
+      },
+      {
+        status: 200,
+        cache: "stale",
+        warning: '110 - "Response is stale"',
+        age: "0",
+        cacheControl: "public, max-age=60, stale-while-revalidate=3600",
+        contentType: "application/json",
+      },
+      {
+        status: 200,
+        cache: "stale",
+        warning: '110 - "Response is stale"',
+        age: "0",
+        cacheControl: "public, max-age=300, stale-while-revalidate=3600",
+        contentType: "application/json",
+      },
+      {
+        status: 200,
+        cache: "stale",
+        warning: '110 - "Response is stale"',
+        age: "0",
+        cacheControl: "public, max-age=300, stale-while-revalidate=3600",
+        contentType: "application/json",
+      },
     ])
   })
 

@@ -94,4 +94,74 @@ describe("activity summary projection", () => {
       expect(result.success.otherBytes).toBe(0)
     }
   })
+
+  test("marks incomplete and over-bound aggregates as partial", () => {
+    const window = Schema.decodeUnknownSync(ActivityWindow)({
+      from: "2024-02-01",
+      to: "2024-03-01",
+    })
+    const result = ActivityDomain.summarize(window, {
+      ...evidence,
+      matchedCommits: 125,
+      incompleteResults: true,
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+    if (Result.isSuccess(result)) {
+      expect(result.success.coverage).toEqual({
+        complete: false,
+        matchedCommits: 125,
+        aggregatedCommits: 1,
+      })
+      expect(result.success.totals.commits).toBe(1)
+    }
+  })
+
+  test("keeps the twenty largest languages and conserves the tail", () => {
+    const window = Schema.decodeUnknownSync(ActivityWindow)({
+      from: "2024-02-01",
+      to: "2024-03-01",
+    })
+    const languages = Array.from({ length: 21 }, (_, index) => ({
+      name: `Language${String(index).padStart(2, "0")}`,
+      bytes: index + 1,
+    }))
+    const result = ActivityDomain.summarize(window, {
+      ...evidence,
+      repositories: [{ nameWithOwner: "owner/repo", languages }],
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+    if (Result.isSuccess(result)) {
+      expect(result.success.languages).toHaveLength(20)
+      expect(result.success.languages[0]?.name).toBe("Language20")
+      expect(result.success.languages.at(-1)?.name).toBe("Language01")
+      expect(result.success.otherBytes).toBe(1)
+      expect(
+        result.success.languages.reduce((total, language) => total + language.bytes, 0) +
+          result.success.otherBytes,
+      ).toBe(231)
+    }
+  })
+
+  test("represents an empty complete window without language data", () => {
+    const window = Schema.decodeUnknownSync(ActivityWindow)({
+      from: "2024-02-01",
+      to: "2024-03-01",
+    })
+    const result = ActivityDomain.summarize(window, {
+      user,
+      items: [],
+      matchedCommits: 0,
+      incompleteResults: false,
+      repositories: [],
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+    if (Result.isSuccess(result)) {
+      expect(result.success.coverage.complete).toBe(true)
+      expect(result.success.languages).toEqual([])
+      expect(result.success.otherBytes).toBe(0)
+    }
+  })
 })
