@@ -19,14 +19,25 @@
   "scripts": {
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
+    "dev": "bun alchemy dev",
+    "deploy": "bun alchemy deploy",
+    "destroy": "bun alchemy destroy",
+    "logs": "bun alchemy logs",
+    "tail": "bun alchemy tail",
     "lint": "oxlint .",
     "typecheck": "bun run --filter '*' typecheck",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run --filter '*' test && bun run --cwd packages/contract openapi:check",
-    "postinstall": "effect-tsgo patch --typescript --oxlint"
+    "test:integration": "bun run --cwd apps/api test:integration",
+    "verify": "bun run format:check && bun run lint && bun run --cwd packages/contract typecheck && bun run --cwd packages/contract test && bun run --cwd packages/contract openapi:check && bun run --cwd apps/api typecheck && bun run --cwd apps/api test && bun run --cwd apps/api test:integration && bun run --cwd apps/docs typecheck && bun run --cwd apps/docs build",
+    "check": "bun run verify",
+    "postinstall": "effect-tsgo patch --typescript --oxlint && bun scripts/apply-alchemy-1082-patch.ts"
   },
   "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@effect/tsgo": "0.32.0",
     "@types/bun": "1.3.14",
+    "alchemy": "catalog:",
+    "effect": "catalog:",
     "oxfmt": "0.62.0",
     "oxlint": "1.77.0",
     "oxlint-tsgolint": "7.0.2001",
