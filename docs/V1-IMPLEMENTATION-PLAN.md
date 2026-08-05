@@ -68,17 +68,17 @@ Do not create commits, branches, PRs, or deployments unless explicitly requested
 
 ## Status
 
-| Slice | Observable increment                                   | Status      |
-| ----: | ------------------------------------------------------ | ----------- |
-|     0 | Baseline contract and decisions                        | Complete    |
-|     1 | Running health/docs walking skeleton                   | Not started |
-|     2 | Latest commit end to end                               | Not started |
-|     3 | Paginated commit feed end to end                       | Not started |
-|     4 | Activity summary end to end                            | Not started |
-|     5 | Contribution streak end to end                         | Not started |
-|     6 | Consistent edge/API policy across all routes           | Not started |
-|     7 | Full resilience and cross-slice runtime verification   | Not started |
-|     8 | CI, documentation completion, and release verification | Not started |
+| Slice | Observable increment                                   | Status   |
+| ----: | ------------------------------------------------------ | -------- |
+|     0 | Baseline contract and decisions                        | Complete |
+|     1 | Running health/docs walking skeleton                   | Complete |
+|     2 | Latest commit end to end                               | Complete |
+|     3 | Paginated commit feed end to end                       | Complete |
+|     4 | Activity summary end to end                            | Complete |
+|     5 | Contribution streak end to end                         | Complete |
+|     6 | Consistent edge/API policy across all routes           | Complete |
+|     7 | Full resilience and cross-slice runtime verification   | Complete |
+|     8 | CI, documentation completion, and release verification | Complete |
 
 ## Slice 0 — Baseline contract and decisions
 
