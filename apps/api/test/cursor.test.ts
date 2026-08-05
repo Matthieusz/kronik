@@ -1,9 +1,12 @@
+/* oxlint-disable effecttsgo/strict-effect-provide */
+
 import { beforeEach, describe, expect, test } from "bun:test"
 import { GitHubUsername } from "@kronik/contract/model"
 import { Clock, Effect, Exit, Layer, Redacted, Schema } from "effect"
 import { Cursor } from "../src/cursor.js"
 
 const username = Schema.decodeUnknownSync(GitHubUsername)("MixedUser")
+const otherUsername = Schema.decodeUnknownSync(GitHubUsername)("otheruser")
 let now = 1_735_776_000_000
 
 const clock: Clock.Clock = {
@@ -47,7 +50,6 @@ describe("commit cursor authority", () => {
         const initial = yield* service.initial(username, 10)
         const value = yield* service.encode(initial)
         const tampered = `${value.slice(0, -1)}${value.endsWith("A") ? "B" : "A"}`
-        const otherUsername = Schema.decodeUnknownSync(GitHubUsername)("otheruser")
         const altered = yield* Effect.exit(service.decode(tampered, username))
         const otherUser = yield* Effect.exit(service.decode(value, otherUsername))
         const wrongDirection = yield* Effect.exit(service.decode(value, username, "backward"))

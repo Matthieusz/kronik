@@ -1,8 +1,10 @@
+/* oxlint-disable effecttsgo/strict-effect-provide */
+
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { LatestCommit } from "@kronik/contract/model"
 import { CommitDomain } from "../src/commit-domain.js"
-import * as ActivityRpcClient from "../src/activity-rpc.js"
+import { latestTestLayer } from "./activity-rpc-test-layer.js"
 import { makeWebHandler } from "../src/http.js"
 import { UserActivity } from "../src/user-activity.js"
 
@@ -51,7 +53,7 @@ describe("latest commit public route", () => {
           }
         }).pipe(
           Effect.provide(
-            ActivityRpcClient.testLayer({
+            latestTestLayer({
               latestCommit: () => Effect.succeed(latest),
             }),
           ),

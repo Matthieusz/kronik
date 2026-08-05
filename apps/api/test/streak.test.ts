@@ -1,7 +1,9 @@
+/* oxlint-disable effecttsgo/strict-effect-provide */
+
 import { describe, expect, test } from "bun:test"
 import { ContributionStreak } from "@kronik/contract/model"
 import { Effect, Schema } from "effect"
-import * as ActivityRpcClient from "../src/activity-rpc.js"
+import { streakTestLayer } from "./activity-rpc-test-layer.js"
 import { makeWebHandler } from "../src/http.js"
 import { UserActivity } from "../src/user-activity.js"
 
@@ -45,7 +47,7 @@ describe("contribution streak public route", () => {
             status: response.status,
             body: yield* Effect.promise(() => response.json()),
           }
-        }).pipe(Effect.provide(ActivityRpcClient.streakTestLayer(service))),
+        }).pipe(Effect.provide(streakTestLayer(service))),
       ),
     )
 

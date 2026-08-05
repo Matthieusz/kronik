@@ -1,7 +1,9 @@
+/* oxlint-disable effecttsgo/strict-effect-provide */
+
 import { describe, expect, test } from "bun:test"
 import { ActivitySummary } from "@kronik/contract/model"
 import { Effect, Schema } from "effect"
-import * as ActivityRpcClient from "../src/activity-rpc.js"
+import { summaryTestLayer } from "./activity-rpc-test-layer.js"
 import { makeWebHandler } from "../src/http.js"
 import { UserActivity } from "../src/user-activity.js"
 
@@ -48,7 +50,7 @@ describe("activity summary public route", () => {
             status: response.status,
             body: yield* Effect.promise(() => response.json()),
           }
-        }).pipe(Effect.provide(ActivityRpcClient.summaryTestLayer(service))),
+        }).pipe(Effect.provide(summaryTestLayer(service))),
       ),
     )
 
