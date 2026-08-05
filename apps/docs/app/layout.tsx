@@ -6,17 +6,29 @@ import { apiReference } from "../lib/api-reference"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Kronik API",
+  title: {
+    default: "Kronik documentation",
+    template: "%s · Kronik",
+  },
   description: "Portfolio-friendly summaries of public GitHub activity.",
 }
 
 /** Root document shell for the static Kronik documentation site. */
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
-      <body>
-        <RootProvider>
-          <DocsLayout tree={apiReference.pageTree}>{children}</DocsLayout>
+    <html lang="en" suppressHydrationWarning>
+      <body className="flex min-h-screen flex-col">
+        <RootProvider search={{ options: { type: "static", api: "/api/search" } }}>
+          <DocsLayout
+            tree={apiReference.pageTree}
+            nav={{ title: "Kronik", url: "/" }}
+            links={[
+              { text: "Concepts", url: "/concepts" },
+              { text: "API reference", url: "/api-reference", active: "nested-url" },
+            ]}
+          >
+            {children}
+          </DocsLayout>
         </RootProvider>
       </body>
     </html>

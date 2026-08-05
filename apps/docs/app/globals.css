@@ -1,21 +1,185 @@
-@import "fumadocs-ui/css/neutral.css";
-@import "fumadocs-ui/css/preset.css";
+@import "fumadocs-ui/style.css";
 
 :root {
-  color-scheme: light;
-  font-family: Arial, sans-serif;
+  color-scheme: light dark;
 }
 
 body {
   margin: 0;
 }
 
-main {
-  margin: 0 auto;
-  max-width: 52rem;
-  padding: 5rem 1.5rem;
+.kronik-home {
+  padding-top: 2rem;
 }
 
-a {
-  color: #155eef;
+.kronik-hero {
+  overflow: hidden;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 1rem;
+  padding: clamp(2rem, 7vw, 5.5rem) clamp(1.5rem, 6vw, 5rem);
+  background:
+    radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--color-fd-primary) 18%, transparent), transparent 32%),
+    linear-gradient(135deg, var(--color-fd-card), var(--color-fd-background));
+}
+
+.kronik-eyebrow {
+  margin: 0 0 1rem;
+  color: var(--color-fd-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.kronik-hero h1 {
+  max-width: 48rem;
+  margin: 0;
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.kronik-lede {
+  max-width: 38rem;
+  margin: 1.5rem 0 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: clamp(1.05rem, 2vw, 1.25rem);
+  line-height: 1.65;
+}
+
+.kronik-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.kronik-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  border: 1px solid var(--color-fd-primary);
+  border-radius: 0.5rem;
+  padding: 0 1rem;
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 120ms ease;
+}
+
+.kronik-button:hover {
+  opacity: 0.86;
+}
+
+.kronik-button-secondary {
+  border-color: var(--color-fd-border);
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+}
+
+.kronik-section {
+  margin-top: 4rem;
+}
+
+.kronik-section-heading {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.025em;
+}
+
+.kronik-section-lede {
+  margin: 0.6rem 0 0;
+  color: var(--color-fd-muted-foreground);
+}
+
+.kronik-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.kronik-card {
+  display: block;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  background: color-mix(in srgb, var(--color-fd-card) 70%, transparent);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.kronik-card:hover {
+  border-color: var(--color-fd-primary);
+  transform: translateY(-2px);
+}
+
+.kronik-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.kronik-card p {
+  margin: 0.65rem 0 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.kronik-card code,
+.kronik-endpoint code {
+  border-radius: 0.3rem;
+  padding: 0.15rem 0.35rem;
+  background: var(--color-fd-secondary);
+  color: var(--color-fd-secondary-foreground);
+  font-size: 0.8em;
+}
+
+.kronik-endpoints {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.kronik-endpoint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-fd-border);
+  padding: 0.9rem 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.kronik-endpoint:hover {
+  color: var(--color-fd-primary);
+}
+
+.kronik-endpoint-title {
+  font-weight: 600;
+}
+
+.kronik-endpoint-path {
+  color: var(--color-fd-muted-foreground);
+  text-align: right;
+}
+
+@media (max-width: 700px) {
+  .kronik-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kronik-endpoint {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .kronik-endpoint-path {
+    text-align: left;
+  }
 }

@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import OpenAPIPage from "../openapi-page"
 import { DocsBody, DocsPage } from "fumadocs-ui/page"
@@ -9,6 +10,23 @@ export const dynamicParams = false
 /** Return the OpenAPI operation slugs that Next.js should prerender. */
 export function generateStaticParams() {
   return apiReference.generateParams()
+}
+
+/** Describe one generated OpenAPI operation page in document metadata. */
+export async function generateMetadata({
+  params,
+}: {
+  readonly params: Promise<{ readonly slug: string[] }>
+}): Promise<Metadata> {
+  const { slug } = await params
+  const page = apiReference.getPage(slug)
+
+  return page === undefined
+    ? {}
+    : {
+        title: page.data.title,
+        description: page.data.description,
+      }
 }
 
 /** Render one generated OpenAPI operation page. */

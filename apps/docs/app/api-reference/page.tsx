@@ -1,6 +1,13 @@
 import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
+import type { Metadata } from "next"
+import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/page"
 import { apiReference } from "../../lib/api-reference"
+
+export const metadata: Metadata = {
+  title: "API reference",
+  description: "Generated reference documentation for the Kronik HTTP API.",
+}
 
 interface OpenApiDocument {
   readonly info?: {
@@ -44,45 +51,47 @@ const readContract = async (): Promise<OpenApiDocument> => {
 
 export default async function ApiReferencePage() {
   const document = await readContract()
-  const endpointCount = Object.keys(document.paths ?? {}).length
-
   const paths = Object.keys(document.paths ?? {})
   const operations = apiReference.getPages()
 
   return (
-    <main>
-      <p>Kronik v1 API reference</p>
-      <h1>{document.info?.title ?? "Kronik API"}</h1>
-      <p>Version {document.info?.version ?? "unknown"}</p>
-      <p>{endpointCount} endpoint paths are generated from the contract package.</p>
-      <ul>
-        {paths.map((path) => (
-          <li key={path}>
-            <code>{path}</code>
-          </li>
-        ))}
-      </ul>
-      <h2>Operations</h2>
-      <ul>
-        {operations.map((operation) => (
-          <li key={operation.url}>
-            <a href={operation.url}>{operation.data.title ?? operation.url}</a>
-          </li>
-        ))}
-      </ul>
-      <p>
-        Fumadocs publishes one generated operation page per contract operation; endpoint schemas
-        are never duplicated in the docs app.
-      </p>
-      <p>
-        <a href="/concepts">Read the conceptual guide</a>
-      </p>
-      <p>
-        <a href="/openapi.json">View the generated OpenAPI document</a>
-      </p>
-      <p>
-        <a href="/">Back to Kronik</a>
-      </p>
-    </main>
+    <DocsPage breadcrumb={{ enabled: false }} tableOfContent={{ enabled: false }}>
+      <DocsBody>
+        <DocsTitle>{document.info?.title ?? "Kronik API"}</DocsTitle>
+        <DocsDescription>
+          A generated reference for the Kronik HTTP API. Every operation below is derived from the
+          shared contract package.
+        </DocsDescription>
+
+        <div className="not-prose kronik-card-grid">
+          <div className="kronik-card">
+            <h3>{paths.length} endpoint paths</h3>
+            <p>Public routes exposed by the current contract.</p>
+          </div>
+          <div className="kronik-card">
+            <h3>{operations.length} operations</h3>
+            <p>Generated pages with parameters, schemas, responses, and examples.</p>
+          </div>
+          <div className="kronik-card">
+            <h3>Version {document.info?.version ?? "unknown"}</h3>
+            <p>Keep your integration aligned with the published contract.</p>
+          </div>
+        </div>
+
+        <h2>Operations</h2>
+        <div className="not-prose kronik-endpoints">
+          {operations.map((operation) => (
+            <a className="kronik-endpoint" href={operation.url} key={operation.url}>
+              <span className="kronik-endpoint-title">{operation.data.title ?? operation.url}</span>
+              <code className="kronik-endpoint-path">{operation.url}</code>
+            </a>
+          ))}
+        </div>
+
+        <p>
+          <a href="/openapi.json">View the generated OpenAPI document →</a>
+        </p>
+      </DocsBody>
+    </DocsPage>
   )
 }
