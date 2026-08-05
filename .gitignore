@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+.wrangler/
+.alchemy/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.DS_Store
