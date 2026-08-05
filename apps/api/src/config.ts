@@ -20,7 +20,7 @@ export class Configuration extends Context.Service<Configuration, RuntimeConfigu
 ) {}
 
 /** Decode API configuration, including the required service-owned GitHub credential. */
-export const layer = Layer.effect(
+export const configurationLayer = Layer.effect(
   Configuration,
   Effect.gen(function* () {
     const githubToken = yield* Config.schema(
@@ -47,6 +47,9 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+/** The configuration layer retained as the package's default layer name. */
+export const layer = configurationLayer
 
 /** A deterministic provider for tests and local composition checks. */
 export const testProvider = (values: Readonly<Record<string, unknown>>) =>

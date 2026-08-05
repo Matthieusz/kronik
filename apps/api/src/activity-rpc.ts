@@ -97,12 +97,15 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
 }
 
 /** Bind the live Cloudflare Durable Object namespace. */
-export const layer = Layer.unwrap(
+export const activityRpcLayer = Layer.unwrap(
   Effect.gen(function* () {
     const namespace = yield* ActivityObject
     return layerWithNamespace(namespace)
   }),
 )
+
+/** The live RPC layer retained as the package's default layer name. */
+export const layer = activityRpcLayer
 
 /** Build a schema-aware in-memory RPC client for latest-route tests. */
 export const testLayer = (service: UserActivity.LatestInterface) =>

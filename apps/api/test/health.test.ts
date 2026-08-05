@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Layer, Redacted } from "effect"
-import { Configuration, layer, testProvider } from "../src/config.js"
+import { Configuration, configurationLayer, testProvider } from "../src/config.js"
 import { makeWebHandler } from "../src/http.js"
 
 const docsUrl = new URL("https://docs.example.test")
@@ -8,7 +8,7 @@ const docsUrl = new URL("https://docs.example.test")
 const withConfiguration = <A>(effect: Effect.Effect<A, never, Configuration>) =>
   effect.pipe(
     Effect.provide(
-      layer.pipe(
+      configurationLayer.pipe(
         Layer.provide(
           testProvider({
             DOCS_URL: docsUrl.toString(),
@@ -45,7 +45,9 @@ describe("health walking skeleton", () => {
       Effect.gen(function* () {
         return yield* Configuration
       }).pipe(
-        Effect.provide(layer.pipe(Layer.provide(testProvider({ DOCS_URL: docsUrl.toString() })))),
+        Effect.provide(
+          configurationLayer.pipe(Layer.provide(testProvider({ DOCS_URL: docsUrl.toString() }))),
+        ),
       ),
     )
 

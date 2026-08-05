@@ -12,9 +12,9 @@ import {
   User,
 } from "@kronik/contract/model"
 import { Clock, Context, Effect, Layer, Option, Redacted, Schedule, Schema } from "effect"
-import * as HttpClient from "effect/unstable/http/HttpClient"
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import { HttpClient, TracerDisabledWhen, mapRequest } from "effect/unstable/http/HttpClient"
+import { bodyJsonUnsafe, empty, prependUrl } from "effect/unstable/http/HttpClientRequest"
+import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse"
 import { ActivityDomain } from "./activity-domain.js"
 import { CommitDomain } from "./commit-domain.js"
 import { Configuration } from "./config.js"
@@ -171,7 +171,7 @@ export class Service extends Context.Service<Service, Interface>()("@kronik/api/
 
 const decodeResponse =
   <S extends Schema.Constraint & { readonly DecodingServices: never }>(schema: S) =>
-  (response: HttpClientResponse.HttpClientResponse, operation: string) =>
+  (response: HttpClientResponse, operation: string) =>
     Effect.gen(function* () {
       const body = yield* response.json.pipe(
         Effect.mapError((cause) => new ProviderFailure({ operation, kind: "malformed", cause })),
@@ -245,12 +245,9 @@ const observe = (sink: Observability.Sink, event: Observability.GitHubRequestEve
   Effect.promise(() => Observability.recordSafely(sink, event))
 
 const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Observability.Sink) {
-  const rawClient = yield* HttpClient.HttpClient
+  const rawClient = yield* HttpClient
   const configuration = yield* Configuration
-  const client = HttpClient.mapRequest(
-    rawClient,
-    HttpClientRequest.prependUrl(configuration.githubBaseUrl.toString()),
-  )
+  const client = mapRequest(rawClient, prependUrl(configuration.githubBaseUrl.toString()))
   const headers = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
@@ -270,7 +267,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
           ? client.get(path, { headers })
           : client.post(path, {
               headers,
-              body: HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.empty, body).body,
+              body: bodyJsonUnsafe(empty, body).body,
             })
       const response = yield* responseEffect.pipe(
         Effect.timeout("5 seconds"),
@@ -323,7 +320,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       }
       return { response, rateRemaining }
     }).pipe(
-      Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+      Effect.provideService(TracerDisabledWhen, () => true),
       Effect.withSpan("github.request", { attributes: { "github.operation": operation } }),
     )
 
@@ -722,11 +719,11 @@ export const layer = Layer.effect(Service, makeClient(Observability.consoleSink)
 
 /** Construct the adapter layer from an explicit HTTP client for deterministic tests. */
 export const layerWithClient = (
-  client: HttpClient.HttpClient,
+  client: HttpClient,
   observability: Observability.Sink = silentObservability,
 ) =>
   Layer.effect(Service, makeClient(observability)).pipe(
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+    Layer.provide(Layer.succeed(HttpClient, client)),
   )
 
 /** Construct configuration values for standalone adapter tests. */

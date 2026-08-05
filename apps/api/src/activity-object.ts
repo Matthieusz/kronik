@@ -13,7 +13,7 @@ import {
   User,
 } from "@kronik/contract/model"
 import { StreakRpcs } from "@kronik/contract/rpc"
-import * as Cloudflare from "alchemy/Cloudflare"
+import { DurableObjectState, RpcDurableObject } from "alchemy/Cloudflare"
 import { RuntimeContext } from "alchemy/RuntimeContext"
 import {
   Cache,
@@ -185,10 +185,9 @@ const normalizeActivityError = (error: unknown): ApiError.DomainErrors => {
 }
 
 /** Schema-validated Durable Object keyed by normalized requested username. */
-export class ActivityObject extends Cloudflare.RpcDurableObject<ActivityObject>()(
-  "KronikActivity",
-  { schema: StreakRpcs },
-) {}
+export class ActivityObject extends RpcDurableObject<ActivityObject>()("KronikActivity", {
+  schema: StreakRpcs,
+}) {}
 
 const AuthorizationFailureDetail = "Kronik's GitHub credential was rejected"
 
@@ -624,7 +623,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
 /** Cloudflare Durable Object adapter for the testable activity coordinator. */
 export const ActivityObjectLive = ActivityObject.make(
   Effect.gen(function* () {
-    const durableState = yield* Cloudflare.DurableObjectState
+    const durableState = yield* DurableObjectState
     const runtime = yield* activityRuntime().pipe(
       Effect.provideService(ActivityState, {
         objectName: durableState.id.name,
