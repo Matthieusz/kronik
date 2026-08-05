@@ -1,0 +1,27 @@
+{
+  "name": "@kronik/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "generate": "bun run scripts/generate-api-reference.ts",
+    "build": "bun run generate && next build",
+    "typecheck": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "fumadocs-core": "16.14.0",
+    "fumadocs-openapi": "11.2.3",
+    "fumadocs-ui": "16.14.0",
+    "next": "16.3.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "26.1.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "catalog:"
+  }
+}

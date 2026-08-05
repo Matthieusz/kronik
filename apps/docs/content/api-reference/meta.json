@@ -1,0 +1,9 @@
+{
+  "pages": [
+    "health.get",
+    "v1.activity.commits",
+    "v1.activity.latestCommit",
+    "v1.activity.summary",
+    "v1.activity.streak"
+  ]
+}
