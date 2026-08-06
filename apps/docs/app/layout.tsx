@@ -22,6 +22,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
           <DocsLayout
             tree={apiReference.pageTree}
             nav={{ title: "Kronik", url: "/" }}
+            githubUrl="https://github.com/Matthieusz/kronik"
             links={[
               { text: "Concepts", url: "/concepts" },
               { text: "API reference", url: "/api-reference", active: "nested-url" },
