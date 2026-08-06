@@ -12,6 +12,7 @@ export default Stack(
     const docs = yield* Website.StaticSite("KronikDocs", {
       command: "bun run build",
       cwd: "apps/docs",
+      env: { NEXT_PUBLIC_API_URL: api.url },
       outdir: "out",
       assets: { htmlHandling: "drop-trailing-slash" },
     })
