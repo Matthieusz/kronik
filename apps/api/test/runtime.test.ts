@@ -1093,6 +1093,7 @@ test.skipIf(Bun.env.KRONIK_LIVE_GITHUB !== "1" || Bun.env.GITHUB_TOKEN === undef
               Layer.succeed(Configuration, {
                 ...configuration,
                 githubToken: Option.some(Redacted.make(token)),
+                githubBaseUrl: new URL("https://api.github.com"),
               }),
             ),
             Layer.provide(FetchHttpClient.layer),

@@ -81,10 +81,6 @@ const responseFor = (pathname: string): { readonly status: number; readonly body
     body: {
       sha,
       html_url: `https://github.com/owner/repo/commit/${sha}`,
-      repository: {
-        full_name: "owner/repo",
-        html_url: "https://github.com/owner/repo",
-      },
       commit: {
         message: "Implement latest\n\nWith details",
         author: { date: "2026-01-02T03:04:05Z" },
@@ -191,6 +187,26 @@ const concurrencyClient = (() => {
 })()
 
 describe("GitHub adapter", () => {
+  test("accepts GitHub commit details without a repository object", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const github = yield* GitHub.Service
+        return yield* github.latestCommit(username)
+      }).pipe(
+        Effect.provide(
+          GitHub.layerWithClient(fakeClient).pipe(
+            Layer.provide(Layer.succeed(Configuration, configuration)),
+          ),
+        ),
+      ),
+    )
+
+    expect(result.commit.repository).toEqual({
+      nameWithOwner: "owner/repo",
+      url: "https://github.com/owner/repo",
+    })
+  })
+
   test("hydrates a stable commit page with the requested search position", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {

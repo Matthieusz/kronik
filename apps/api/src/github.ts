@@ -46,7 +46,6 @@ const CommitIdentityResponse = Schema.Struct({ date: Schema.String })
 const CommitDetailsResponse = Schema.Struct({
   sha: Schema.String,
   html_url: Schema.String,
-  repository: SearchRepositoryResponse,
   commit: Schema.Struct({
     message: Schema.String,
     author: CommitIdentityResponse,
@@ -474,7 +473,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
         failure instanceof ProviderFailure ? classifyProviderFailure(failure) : failure,
       ),
     )
-    return { sha, details }
+    return { sha, details, repository: item.repository }
   })
 
   const toEvidence = Effect.fn("GitHub.toEvidence")(function* (
