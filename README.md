@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="apps/docs/app/icon.svg" alt="Kronik logo" width="88" height="88" />
+</p>
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/header/graph.svg?title=Kronik&amp;subtitle=Public+GitHub+activity,+presented+clearly.&amp;logo=github&amp;align=left&amp;font=geist-mono&amp;border=false&amp;mode=dark" />
     <img alt="Kronik" src="https://shieldcn.dev/header/graph.svg?title=Kronik&amp;subtitle=Public+GitHub+activity,+presented+clearly.&amp;logo=github&amp;align=left&amp;font=geist-mono&amp;border=false&amp;mode=light" />
@@ -10,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Matthieusz/kronik/actions/workflows/ci.yml"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/ci/Matthieusz/kronik.svg?workflow=CI&amp;branch=main&amp;variant=secondary&amp;size=xs&amp;mode=dark" /><img alt="CI status" src="https://shieldcn.dev/github/ci/Matthieusz/kronik.svg?workflow=CI&amp;branch=main&amp;variant=secondary&amp;size=xs&amp;mode=light" /></picture></a>
+  <a href="https://github.com/Matthieusz/kronik/actions/workflows/ci.yml"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/ci/Matthieusz/kronik.svg?workflow=ci.yml&amp;branch=main&amp;variant=secondary&amp;size=xs&amp;mode=dark" /><img alt="CI status" src="https://shieldcn.dev/github/ci/Matthieusz/kronik.svg?workflow=ci.yml&amp;branch=main&amp;variant=secondary&amp;size=xs&amp;mode=light" /></picture></a>
   <a href="https://github.com/Matthieusz/kronik/stargazers"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/stars/Matthieusz/kronik.svg?variant=secondary&amp;size=xs&amp;mode=dark" /><img alt="GitHub stars" src="https://shieldcn.dev/github/stars/Matthieusz/kronik.svg?variant=secondary&amp;size=xs&amp;mode=light" /></picture></a>
   <a href="LICENSE"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/license/Matthieusz/kronik.svg?variant=secondary&amp;size=xs&amp;mode=dark" /><img alt="License" src="https://shieldcn.dev/github/license/Matthieusz/kronik.svg?variant=secondary&amp;size=xs&amp;mode=light" /></picture></a>
 </p>
