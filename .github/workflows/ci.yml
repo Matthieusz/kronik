@@ -44,6 +44,11 @@ jobs:
 
       - name: Verify API
         working-directory: apps/api
+        env:
+          # Alchemy's local Cloudflare provider still resolves credentials in dev mode;
+          # these are deliberately fake because the test never contacts Cloudflare.
+          CLOUDFLARE_ACCOUNT_ID: 00000000000000000000000000000000
+          CLOUDFLARE_API_TOKEN: kronik-local-test-token
         run: |
           bun run typecheck
           bun test
