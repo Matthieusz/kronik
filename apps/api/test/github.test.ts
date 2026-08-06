@@ -119,6 +119,8 @@ const configuration = {
 const concurrencyClient = (() => {
   let active = 0
   let maximum = 0
+  let hydrationActive = 0
+  let hydrationMaximum = 0
   let languageCalls = 0
   const client = HttpClient.make((request, url) => {
     const response = (body: unknown) =>
@@ -165,25 +167,35 @@ const concurrencyClient = (() => {
       )
     }
     const repository = url.pathname.split("/")[3]
-    return Effect.succeed(
-      response({
-        sha,
-        html_url: `https://github.com/owner/${repository}/commit/${sha}`,
-        repository: {
-          full_name: `owner/${repository}`,
-          html_url: `https://github.com/owner/${repository}`,
-        },
-        commit: {
-          message: "Commit",
-          author: { date: "2026-01-02T03:04:05Z" },
-          committer: { date: "2026-01-02T03:05:06Z" },
-        },
-        stats: { additions: 3, deletions: 1 },
-        parents: [],
+    hydrationActive += 1
+    hydrationMaximum = Math.max(hydrationMaximum, hydrationActive)
+    return Effect.promise(() =>
+      Promise.resolve().then(() => {
+        hydrationActive -= 1
+        return response({
+          sha,
+          html_url: `https://github.com/owner/${repository}/commit/${sha}`,
+          repository: {
+            full_name: `owner/${repository}`,
+            html_url: `https://github.com/owner/${repository}`,
+          },
+          commit: {
+            message: "Commit",
+            author: { date: "2026-01-02T03:04:05Z" },
+            committer: { date: "2026-01-02T03:05:06Z" },
+          },
+          stats: { additions: 3, deletions: 1 },
+          parents: [],
+        })
       }),
     )
   })
-  return { client, maximum: () => maximum, languageCalls: () => languageCalls }
+  return {
+    client,
+    maximum: () => maximum,
+    hydrationMaximum: () => hydrationMaximum,
+    languageCalls: () => languageCalls,
+  }
 })()
 
 describe("GitHub adapter", () => {
@@ -283,7 +295,7 @@ describe("GitHub adapter", () => {
     ])
   })
 
-  test("bounds independent repository-language lookups at four", async () => {
+  test("bounds independent repository-language lookups and overlaps commit hydration", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
@@ -304,6 +316,8 @@ describe("GitHub adapter", () => {
     expect(result.repositories).toHaveLength(25)
     expect(concurrencyClient.languageCalls()).toBe(25)
     expect(concurrencyClient.maximum()).toBeLessThanOrEqual(4)
+    expect(concurrencyClient.hydrationMaximum()).toBeGreaterThan(1)
+    expect(concurrencyClient.hydrationMaximum()).toBeLessThanOrEqual(8)
   })
 
   test("reads a bounded contribution calendar through GraphQL", async () => {

@@ -94,6 +94,8 @@ const ContributionCount = Schema.Number.pipe(
   Schema.check(Schema.isInt()),
   Schema.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
 )
+/** Keep independent commit-hydration requests bounded for the shared GitHub budget. */
+const CommitHydrationConcurrency = 8
 /** Keep independent repository-language requests bounded for the shared GitHub budget. */
 const LanguageConcurrency = 4
 
@@ -481,12 +483,13 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     hydrated: {
       readonly sha: CommitDomain.Evidence["sha"]
       readonly details: CommitDetailsResponse
+      readonly repository: SearchResponse["items"][number]["repository"]
     },
   ) {
     const details = hydrated.details
     const repository = yield* Schema.decodeUnknownEffect(Repository)({
-      nameWithOwner: details.repository.full_name,
-      url: details.repository.html_url,
+      nameWithOwner: hydrated.repository.full_name,
+      url: hydrated.repository.html_url,
     }).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable repository")))
     const parents = yield* Effect.forEach(details.parents, (parent) =>
       Schema.decodeUnknownEffect(CommitParent)({ sha: parent.sha, url: parent.html_url }).pipe(
@@ -661,8 +664,10 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     const matchingItems = search.items
       .filter((candidate) => candidate.author?.login.toLowerCase() === user.login.toLowerCase())
       .slice(0, 100)
-    const items = yield* Effect.forEach(matchingItems, (item) =>
-      hydrateCommit(item).pipe(Effect.flatMap((hydrated) => toEvidence(user, hydrated))),
+    const items = yield* Effect.forEach(
+      matchingItems,
+      (item) => hydrateCommit(item).pipe(Effect.flatMap((hydrated) => toEvidence(user, hydrated))),
+      { concurrency: CommitHydrationConcurrency },
     )
     const repositories = new Map<string, Repository>()
     for (const item of items) repositories.set(item.repository.nameWithOwner, item.repository)
@@ -700,8 +705,10 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     const matchingItems = search.items.filter(
       (candidate) => candidate.author?.login.toLowerCase() === user.login.toLowerCase(),
     )
-    const items = yield* Effect.forEach(matchingItems, (item) =>
-      hydrateCommit(item).pipe(Effect.flatMap((hydrated) => toEvidence(user, hydrated))),
+    const items = yield* Effect.forEach(
+      matchingItems,
+      (item) => hydrateCommit(item).pipe(Effect.flatMap((hydrated) => toEvidence(user, hydrated))),
+      { concurrency: CommitHydrationConcurrency },
     )
     const totalCount = search.total_count ?? search.items.length
     if (!Number.isSafeInteger(totalCount) || totalCount < 0) {
