@@ -10,35 +10,34 @@ const fields = {
 }
 
 /** The request failed local contract validation. */
-export class InvalidRequest extends Schema.TaggedErrorClass<InvalidRequest>()(
-  "InvalidRequest",
-  { ...fields, status: Schema.Literal(400) },
-  { httpApiStatus: 400 },
-) {}
+export class InvalidRequest extends Schema.TaggedError<
+  InvalidRequest,
+  { readonly brand: unique symbol }
+>()("InvalidRequest", { ...fields, status: Schema.Literal(400) }, { httpApiStatus: 400 }) {}
 
 /** The supplied pagination cursor is invalid, expired, or belongs to another user. */
-export class InvalidCursor extends Schema.TaggedErrorClass<InvalidCursor>()(
-  "InvalidCursor",
-  { ...fields, status: Schema.Literal(400) },
-  { httpApiStatus: 400 },
-) {}
+export class InvalidCursor extends Schema.TaggedError<
+  InvalidCursor,
+  { readonly brand: unique symbol }
+>()("InvalidCursor", { ...fields, status: Schema.Literal(400) }, { httpApiStatus: 400 }) {}
 
 /** GitHub does not resolve the requested user. */
-export class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()(
-  "UserNotFound",
-  { ...fields, status: Schema.Literal(404) },
-  { httpApiStatus: 404 },
-) {}
+export class UserNotFound extends Schema.TaggedError<
+  UserNotFound,
+  { readonly brand: unique symbol }
+>()("UserNotFound", { ...fields, status: Schema.Literal(404) }, { httpApiStatus: 404 }) {}
 
 /** The requested user has no matching public default-branch commit. */
-export class LatestCommitNotFound extends Schema.TaggedErrorClass<LatestCommitNotFound>()(
-  "LatestCommitNotFound",
-  { ...fields, status: Schema.Literal(404) },
-  { httpApiStatus: 404 },
-) {}
+export class LatestCommitNotFound extends Schema.TaggedError<
+  LatestCommitNotFound,
+  { readonly brand: unique symbol }
+>()("LatestCommitNotFound", { ...fields, status: Schema.Literal(404) }, { httpApiStatus: 404 }) {}
 
 /** The anonymous caller exceeded Kronik's public request budget. */
-export class RateLimited extends Schema.TaggedErrorClass<RateLimited>()(
+export class RateLimited extends Schema.TaggedError<
+  RateLimited,
+  { readonly brand: unique symbol }
+>()(
   "RateLimited",
   {
     ...fields,
@@ -49,18 +48,16 @@ export class RateLimited extends Schema.TaggedErrorClass<RateLimited>()(
 ) {}
 
 /** GitHub rejected or could not satisfy Kronik's upstream request. */
-export class UpstreamFailure extends Schema.TaggedErrorClass<UpstreamFailure>()(
-  "UpstreamFailure",
-  { ...fields, status: Schema.Literal(502) },
-  { httpApiStatus: 502 },
-) {}
+export class UpstreamFailure extends Schema.TaggedError<
+  UpstreamFailure,
+  { readonly brand: unique symbol }
+>()("UpstreamFailure", { ...fields, status: Schema.Literal(502) }, { httpApiStatus: 502 }) {}
 
 /** Kronik could not complete the request within its availability policy. */
-export class ServiceUnavailable extends Schema.TaggedErrorClass<ServiceUnavailable>()(
-  "ServiceUnavailable",
-  { ...fields, status: Schema.Literal(503) },
-  { httpApiStatus: 503 },
-) {}
+export class ServiceUnavailable extends Schema.TaggedError<
+  ServiceUnavailable,
+  { readonly brand: unique symbol }
+>()("ServiceUnavailable", { ...fields, status: Schema.Literal(503) }, { httpApiStatus: 503 }) {}
 
 /** Every declared problem value crossing the RPC boundary. */
 export const DomainErrors = Schema.Union([
@@ -72,35 +69,42 @@ export const DomainErrors = Schema.Union([
   UpstreamFailure,
   ServiceUnavailable,
 ])
+
 export type DomainErrors = typeof DomainErrors.Type
 
 const HttpInvalidRequest = Schema.Struct({ ...fields, status: Schema.Literal(400) }).annotate({
   identifier: "InvalidRequestProblem",
   httpApiStatus: 400,
 })
+
 const HttpInvalidCursor = Schema.Struct({ ...fields, status: Schema.Literal(400) }).annotate({
   identifier: "InvalidCursorProblem",
   httpApiStatus: 400,
 })
+
 const HttpUserNotFound = Schema.Struct({ ...fields, status: Schema.Literal(404) }).annotate({
   identifier: "UserNotFoundProblem",
   httpApiStatus: 404,
 })
+
 const HttpLatestCommitNotFound = Schema.Struct({ ...fields, status: Schema.Literal(404) }).annotate(
   {
     identifier: "LatestCommitNotFoundProblem",
     httpApiStatus: 404,
   },
 )
+
 const HttpRateLimited = Schema.Struct({
   ...fields,
   status: Schema.Literal(429),
   retryAfterSeconds: Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0))),
 }).annotate({ identifier: "RateLimitedProblem", httpApiStatus: 429 })
+
 const HttpUpstreamFailure = Schema.Struct({ ...fields, status: Schema.Literal(502) }).annotate({
   identifier: "UpstreamFailureProblem",
   httpApiStatus: 502,
 })
+
 const HttpServiceUnavailable = Schema.Struct({ ...fields, status: Schema.Literal(503) }).annotate({
   identifier: "ServiceUnavailableProblem",
   httpApiStatus: 503,

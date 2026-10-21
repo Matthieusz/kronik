@@ -1,7 +1,10 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 export * as KronikApi from "./api.js"
 
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { HttpDomainErrors } from "./errors.js"
 import {
   ActivitySummary,

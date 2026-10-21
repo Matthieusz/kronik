@@ -1,7 +1,10 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 import { ApiError } from "@kronik/contract/errors"
 import { CommitRpcs, LatestCommitRpcs, StreakRpcs, SummaryRpcs } from "@kronik/contract/rpc"
 import { Effect, Layer } from "effect"
-import { RpcTest } from "effect/unstable/rpc"
+import { RpcTest } from "effect/rpc"
 import { UserActivity } from "../src/user-activity.js"
 
 /* oxlint-disable effecttsgo/strict-effect-provide */

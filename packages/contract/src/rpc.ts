@@ -1,7 +1,10 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 export * as ActivityRpc from "./rpc.js"
 
 import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { Rpc, RpcGroup } from "effect/rpc"
 import { DomainErrors } from "./errors.js"
 import {
   ActivitySummary,

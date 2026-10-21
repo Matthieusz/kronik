@@ -1,4 +1,7 @@
-import { OpenApi } from "effect/unstable/httpapi"
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
+import { OpenApi } from "effect/http-api"
 import { Api } from "../src/api.js"
 
 const document = `${JSON.stringify(OpenApi.fromApi(Api), null, 2)}\n`

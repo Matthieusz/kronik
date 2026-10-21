@@ -467,30 +467,266 @@
   },
   "components": {
     "schemas": {
-      "Health": {
+      "ServiceUnavailableProblem": {
         "type": "object",
         "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
           "status": {
-            "type": "string",
+            "type": "number",
             "enum": [
-              "ok"
+              503
             ]
           }
         },
         "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
           "status"
         ],
         "additionalProperties": false
       },
-      "GitHubUsername": {
-        "type": "string",
-        "allOf": [
-          {
-            "pattern": "^(?!-)(?!.*--)[A-Za-z0-9-]{1,39}(?<!-)$"
+      "UpstreamFailureProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
           }
-        ]
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
       },
-      "Cursor": {
+      "RateLimitedProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              429
+            ]
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status",
+          "retryAfterSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "LatestCommitNotFoundProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "UserNotFoundProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidCursorProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidRequestProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "ContributionStreak": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "from": {
+            "$ref": "#/components/schemas/IsoDate"
+          },
+          "to": {
+            "$ref": "#/components/schemas/IsoDate"
+          },
+          "currentStreak": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 365
+          },
+          "longestStreak": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 365
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "user",
+          "from",
+          "to",
+          "currentStreak",
+          "longestStreak",
+          "active"
+        ],
+        "additionalProperties": false
+      },
+      "IsoDate": {
         "type": "string"
       },
       "User": {
@@ -503,7 +739,6 @@
             "type": "string",
             "allOf": [
               {
-                "pattern": "^https?:\\/\\/[^\\s]+$",
                 "format": "uri"
               }
             ]
@@ -512,7 +747,6 @@
             "type": "string",
             "allOf": [
               {
-                "pattern": "^https?:\\/\\/[^\\s]+$",
                 "format": "uri"
               }
             ]
@@ -525,68 +759,167 @@
         ],
         "additionalProperties": false
       },
-      "CommitSha": {
-        "type": "string",
-        "allOf": [
-          {
-            "pattern": "^[0-9a-f]{40}$"
-          }
-        ]
+      "GitHubUsername": {
+        "type": "string"
       },
-      "Repository": {
+      "ActivitySummary": {
         "type": "object",
         "properties": {
-          "nameWithOwner": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              }
-            ]
+          "user": {
+            "$ref": "#/components/schemas/User"
           },
-          "url": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^https?:\\/\\/[^\\s]+$",
-                "format": "uri"
-              }
-            ]
+          "window": {
+            "$ref": "#/components/schemas/ActivityWindow"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ActivityCoverage"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ActivityTotals"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Language"
+            }
+          },
+          "otherBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [
-          "nameWithOwner",
-          "url"
+          "user",
+          "window",
+          "coverage",
+          "totals",
+          "languages",
+          "otherBytes"
         ],
         "additionalProperties": false
       },
-      "IsoTimestamp": {
-        "type": "string",
-        "allOf": [
-          {
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
-          }
-        ]
-      },
-      "CommitParent": {
+      "Language": {
         "type": "object",
         "properties": {
-          "sha": {
-            "$ref": "#/components/schemas/CommitSha"
-          },
-          "url": {
+          "name": {
             "type": "string",
-            "allOf": [
+            "minLength": 1
+          },
+          "color": {
+            "anyOf": [
               {
-                "pattern": "^https?:\\/\\/[^\\s]+$",
-                "format": "uri"
+                "type": "string"
+              },
+              {
+                "type": "null"
               }
             ]
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "percentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
           }
         },
         "required": [
-          "sha",
-          "url"
+          "name",
+          "color",
+          "bytes",
+          "percentage"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityTotals": {
+        "type": "object",
+        "properties": {
+          "commits": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "additions": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "deletions": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "changedLines": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "commits",
+          "additions",
+          "deletions",
+          "changedLines"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityCoverage": {
+        "type": "object",
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "matchedCommits": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "aggregatedCommits": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "complete",
+          "matchedCommits",
+          "aggregatedCommits"
+        ],
+        "additionalProperties": false
+      },
+      "ActivityWindow": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/IsoDate"
+          },
+          "to": {
+            "$ref": "#/components/schemas/IsoDate"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "LatestCommit": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "commit": {
+            "$ref": "#/components/schemas/CommitSummary"
+          }
+        },
+        "required": [
+          "user",
+          "commit"
         ],
         "additionalProperties": false
       },
@@ -600,7 +933,6 @@
             "type": "string",
             "allOf": [
               {
-                "pattern": "^https?:\\/\\/[^\\s]+$",
                 "format": "uri"
               }
             ]
@@ -625,30 +957,18 @@
           },
           "additions": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "deletions": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "changedLines": {
             "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "parents": {
             "type": "array",
@@ -670,6 +990,55 @@
           "deletions",
           "changedLines",
           "parents"
+        ],
+        "additionalProperties": false
+      },
+      "CommitParent": {
+        "type": "object",
+        "properties": {
+          "sha": {
+            "$ref": "#/components/schemas/CommitSha"
+          },
+          "url": {
+            "type": "string",
+            "allOf": [
+              {
+                "format": "uri"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sha",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "CommitSha": {
+        "type": "string"
+      },
+      "IsoTimestamp": {
+        "type": "string"
+      },
+      "Repository": {
+        "type": "object",
+        "properties": {
+          "nameWithOwner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "allOf": [
+              {
+                "format": "uri"
+              }
+            ]
+          }
+        },
+        "required": [
+          "nameWithOwner",
+          "url"
         ],
         "additionalProperties": false
       },
@@ -714,485 +1083,21 @@
         ],
         "additionalProperties": false
       },
-      "InvalidRequestProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              400
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance",
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "InvalidCursorProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              400
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance",
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "UserNotFoundProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              404
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance",
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "LatestCommitNotFoundProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              404
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance",
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "RateLimitedProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              429
-            ]
-          },
-          "retryAfterSeconds": {
-            "type": "integer",
-            "allOf": [
-              {
-                "exclusiveMinimum": 0
-              }
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance",
-          "status",
-          "retryAfterSeconds"
-        ],
-        "additionalProperties": false
-      },
-      "UpstreamFailureProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              502
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance",
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "ServiceUnavailableProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              503
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance",
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "LatestCommit": {
-        "type": "object",
-        "properties": {
-          "user": {
-            "$ref": "#/components/schemas/User"
-          },
-          "commit": {
-            "$ref": "#/components/schemas/CommitSummary"
-          }
-        },
-        "required": [
-          "user",
-          "commit"
-        ],
-        "additionalProperties": false
-      },
-      "IsoDate": {
+      "Cursor": {
         "type": "string"
       },
-      "ActivityWindow": {
+      "Health": {
         "type": "object",
         "properties": {
-          "from": {
-            "$ref": "#/components/schemas/IsoDate"
-          },
-          "to": {
-            "$ref": "#/components/schemas/IsoDate"
-          }
-        },
-        "required": [
-          "from",
-          "to"
-        ],
-        "additionalProperties": false
-      },
-      "ActivityCoverage": {
-        "type": "object",
-        "properties": {
-          "complete": {
-            "type": "boolean"
-          },
-          "matchedCommits": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
-          },
-          "aggregatedCommits": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
-          }
-        },
-        "required": [
-          "complete",
-          "matchedCommits",
-          "aggregatedCommits"
-        ],
-        "additionalProperties": false
-      },
-      "ActivityTotals": {
-        "type": "object",
-        "properties": {
-          "commits": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
-          },
-          "additions": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
-          },
-          "deletions": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
-          },
-          "changedLines": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
-          }
-        },
-        "required": [
-          "commits",
-          "additions",
-          "deletions",
-          "changedLines"
-        ],
-        "additionalProperties": false
-      },
-      "Language": {
-        "type": "object",
-        "properties": {
-          "name": {
+          "status": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              }
-            ]
-          },
-          "color": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "bytes": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
-          },
-          "percentage": {
-            "type": "number",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 100
-              }
+            "enum": [
+              "ok"
             ]
           }
         },
         "required": [
-          "name",
-          "color",
-          "bytes",
-          "percentage"
-        ],
-        "additionalProperties": false
-      },
-      "ActivitySummary": {
-        "type": "object",
-        "properties": {
-          "user": {
-            "$ref": "#/components/schemas/User"
-          },
-          "window": {
-            "$ref": "#/components/schemas/ActivityWindow"
-          },
-          "coverage": {
-            "$ref": "#/components/schemas/ActivityCoverage"
-          },
-          "totals": {
-            "$ref": "#/components/schemas/ActivityTotals"
-          },
-          "languages": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Language"
-            }
-          },
-          "otherBytes": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              }
-            ]
-          }
-        },
-        "required": [
-          "user",
-          "window",
-          "coverage",
-          "totals",
-          "languages",
-          "otherBytes"
-        ],
-        "additionalProperties": false
-      },
-      "ContributionStreak": {
-        "type": "object",
-        "properties": {
-          "user": {
-            "$ref": "#/components/schemas/User"
-          },
-          "from": {
-            "$ref": "#/components/schemas/IsoDate"
-          },
-          "to": {
-            "$ref": "#/components/schemas/IsoDate"
-          },
-          "currentStreak": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              },
-              {
-                "minimum": 0,
-                "maximum": 365
-              }
-            ]
-          },
-          "longestStreak": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0,
-                "maximum": 9007199254740991
-              },
-              {
-                "minimum": 0,
-                "maximum": 365
-              }
-            ]
-          },
-          "active": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "user",
-          "from",
-          "to",
-          "currentStreak",
-          "longestStreak",
-          "active"
+          "status"
         ],
         "additionalProperties": false
       }

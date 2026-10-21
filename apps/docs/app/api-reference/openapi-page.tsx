@@ -2,7 +2,7 @@
 
 import type { ChangeEvent, ComponentProps } from "react"
 import { useEffect, useRef } from "react"
-import { Custom } from "fumadocs-openapi/playground/client"
+import { Custom } from "fumadocs-openapi/ui/playground/client"
 import { createOpenAPIPage } from "fumadocs-openapi/ui"
 import type { CreateOpenAPIPageOptions } from "fumadocs-openapi/ui"
 

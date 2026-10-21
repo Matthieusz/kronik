@@ -29,14 +29,14 @@ export const configurationLayer = Layer.effect(
         "GITHUB_TOKEN",
       ),
     )
-    const cursorSecret = yield* Config.option(Config.redacted("CURSOR_SECRET"))
-    const docsUrl = yield* Config.url("DOCS_URL").pipe(
+    const cursorSecret = yield* Config.option(Config.Redacted("CURSOR_SECRET"))
+    const docsUrl = yield* Config.URL("DOCS_URL").pipe(
       Config.withDefault(new URL("http://localhost:3001")),
     )
-    const githubBaseUrl = yield* Config.url("GITHUB_BASE_URL").pipe(
+    const githubBaseUrl = yield* Config.URL("GITHUB_BASE_URL").pipe(
       Config.withDefault(new URL("https://api.github.com")),
     )
-    const githubUserAgent = yield* Config.string("GITHUB_USER_AGENT").pipe(
+    const githubUserAgent = yield* Config.String("GITHUB_USER_AGENT").pipe(
       Config.withDefault("kronik"),
     )
 

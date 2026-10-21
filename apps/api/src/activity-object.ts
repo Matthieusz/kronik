@@ -1,3 +1,6 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 export * as ActivityObjectModule from "./activity-object.js"
 
 import { ApiError } from "@kronik/contract/errors"
@@ -29,7 +32,7 @@ import {
   Schema,
   Scope,
 } from "effect"
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc"
+import { RpcSerialization, RpcServer } from "effect/rpc"
 import { ActivityDomain } from "./activity-domain.js"
 import { CommitDomain } from "./commit-domain.js"
 import { Cursor } from "./cursor.js"

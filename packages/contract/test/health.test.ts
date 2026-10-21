@@ -1,6 +1,9 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 import { describe, expect, test } from "bun:test"
 import { Result, Schema } from "effect"
-import { OpenApi } from "effect/unstable/httpapi"
+import { OpenApi } from "effect/http-api"
 import { HealthApi, HealthGroup } from "../src/api.js"
 import { Health } from "../src/model.js"
 

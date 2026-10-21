@@ -1,3 +1,6 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 /* oxlint-disable effecttsgo/strict-effect-provide */
 
 import { beforeEach, describe, expect, test } from "bun:test"
@@ -12,7 +15,7 @@ import { GitHub } from "../src/github.js"
 import { makeWebHandler } from "../src/http.js"
 import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Schema, Scope } from "effect"
 import { RuntimeContext } from "alchemy/RuntimeContext"
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc"
+import { RpcClient, RpcSerialization } from "effect/rpc"
 import {
   FetchHttpClient,
   HttpClient,
@@ -20,7 +23,7 @@ import {
   HttpClientResponse,
   HttpServerRequest,
   HttpServerResponse,
-} from "effect/unstable/http"
+} from "effect/http"
 import { UserActivity } from "../src/user-activity.js"
 
 const httpClientResponseFromWeb = HttpClientResponse.fromWeb

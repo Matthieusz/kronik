@@ -1,3 +1,6 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 export * as GitHub from "./github.js"
 
 import { ApiError } from "@kronik/contract/errors"
@@ -12,9 +15,9 @@ import {
   User,
 } from "@kronik/contract/model"
 import { Clock, Context, Effect, Layer, Option, Redacted, Result, Schedule, Schema } from "effect"
-import { HttpClient, TracerDisabledWhen, mapRequest } from "effect/unstable/http/HttpClient"
-import { bodyJsonUnsafe, empty, prependUrl } from "effect/unstable/http/HttpClientRequest"
-import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse"
+import { HttpClient, TracerDisabledWhen, mapRequest } from "effect/http/HttpClient"
+import { bodyJsonUnsafe, empty, prependUrl } from "effect/http/HttpClientRequest"
+import type { HttpClientResponse } from "effect/http/HttpClientResponse"
 import { ActivityDomain } from "./activity-domain.js"
 import { CommitDomain } from "./commit-domain.js"
 import { Configuration } from "./config.js"
@@ -141,7 +144,10 @@ export interface StreakEvidence {
   readonly days: ReadonlyArray<StreakDomain.CalendarDay>
 }
 
-class ProviderFailure extends Schema.TaggedErrorClass<ProviderFailure>()("GitHub.ProviderFailure", {
+class ProviderFailure extends Schema.TaggedError<
+  ProviderFailure,
+  { readonly brand: unique symbol }
+>()("GitHub.ProviderFailure", {
   operation: Schema.String,
   kind: Schema.Literals(["transport", "timeout", "malformed", "status", "rate"]),
   status: Schema.optionalKey(Schema.Number),

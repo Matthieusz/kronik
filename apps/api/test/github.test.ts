@@ -1,3 +1,6 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 /* oxlint-disable effecttsgo/strict-effect-provide */
 
 import { describe, expect, test } from "bun:test"
@@ -6,7 +9,7 @@ import { GitHub } from "../src/github.js"
 import { Observability } from "../src/observability.js"
 import { CommitSha, GitHubUsername, IsoDate, IsoTimestamp } from "@kronik/contract/model"
 import { Effect, Layer, Option, Redacted, Schema } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 
 const sha = "0123456789abcdef0123456789abcdef01234567"
 const snapshot = Schema.decodeUnknownSync(IsoTimestamp)("2026-01-02T04:00:00Z")

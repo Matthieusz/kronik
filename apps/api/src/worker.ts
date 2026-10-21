@@ -1,8 +1,11 @@
+// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
+/* oxlint-disable effecttsgo/unstable-api-usage */
+
 import { RateLimit, RateLimitBinding, type RateLimitClient, Worker } from "alchemy/Cloudflare"
 import { Duration, Effect, Layer, Option } from "effect"
 import { Clock } from "effect"
 import type { ConfigError } from "effect/Config"
-import { layer } from "effect/unstable/http/FetchHttpClient"
+import { layer } from "effect/http/FetchHttpClient"
 import { ActivityObject, ActivityObjectLive } from "./activity-object.js"
 import { activityRpcLayer } from "./activity-rpc.js"
 import { Configuration, configurationLayer } from "./config.js"
@@ -10,8 +13,8 @@ import { Cursor } from "./cursor.js"
 import { GitHub } from "./github.js"
 import { cloudflareEdgeCache, makeHttpEffect, makePublicResponse } from "./http.js"
 import { Observability } from "./observability.js"
-import { fromWeb } from "effect/unstable/http/HttpServerResponse"
-import { HttpServerRequest, toWeb } from "effect/unstable/http/HttpServerRequest"
+import { fromWeb } from "effect/http/HttpServerResponse"
+import { HttpServerRequest, toWeb } from "effect/http/HttpServerRequest"
 import { UserActivity } from "./user-activity.js"
 
 /* SAFETY: the Cloudflare generated RateLimit client exposes unknown channels; this adapter catches all failures and parses its result. */
