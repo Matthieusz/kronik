@@ -1,5 +1,7 @@
 import { Layer, Option, Redacted } from "effect"
 import { Configuration } from "../src/config.js"
+// This fixture is a Worker composition root, not a service consumer.
+// oxlint-disable-next-line anti-slop-effect/no-service-constructor-imports
 import { KronikApi, makeKronikWorkerInitializer } from "../src/worker.js"
 
 const configuration = Configuration.of({

@@ -13,6 +13,7 @@ const problem = (kind: string): ApiError.DomainErrors => {
       instance: "urn:kronik:test",
       status: 400,
     })
+
   if (kind === "InvalidCursor")
     return new ApiError.InvalidCursor({
       type: "https://kronik.dev/problems/invalid-cursor",
@@ -21,6 +22,7 @@ const problem = (kind: string): ApiError.DomainErrors => {
       instance: "urn:kronik:test",
       status: 400,
     })
+
   if (kind === "UserNotFound")
     return new ApiError.UserNotFound({
       type: "https://kronik.dev/problems/user-not-found",
@@ -29,6 +31,7 @@ const problem = (kind: string): ApiError.DomainErrors => {
       instance: "urn:kronik:test",
       status: 404,
     })
+
   if (kind === "LatestCommitNotFound")
     return new ApiError.LatestCommitNotFound({
       type: "https://kronik.dev/problems/latest-commit-not-found",
@@ -37,6 +40,7 @@ const problem = (kind: string): ApiError.DomainErrors => {
       instance: "urn:kronik:test",
       status: 404,
     })
+
   if (kind === "RateLimited")
     return new ApiError.RateLimited({
       type: "https://kronik.dev/problems/rate-limited",
@@ -46,6 +50,7 @@ const problem = (kind: string): ApiError.DomainErrors => {
       status: 429,
       retryAfterSeconds: 17,
     })
+
   if (kind === "UpstreamFailure")
     return new ApiError.UpstreamFailure({
       type: "https://kronik.dev/problems/upstream-failure",
@@ -54,6 +59,7 @@ const problem = (kind: string): ApiError.DomainErrors => {
       instance: "urn:kronik:test",
       status: 502,
     })
+
   return new ApiError.ServiceUnavailable({
     type: "https://kronik.dev/problems/service-unavailable",
     title: "Service unavailable",
@@ -93,10 +99,12 @@ describe("public problem projection", () => {
           }),
         ),
       )
+
       for (const route of routes) {
         const response = await web.handler(
           new Request(`https://api.example.test/v1/users/MixedUser/${route}`),
         )
+
         const body = await response.json()
 
         expect(response.status).toBe(status)
@@ -113,8 +121,9 @@ describe("public problem projection", () => {
           status,
           instance: "urn:kronik:request:problem-test",
         })
-        expect(Reflect.get(body, "_tag")).toBeUndefined()
+        expect(body).not.toHaveProperty("_tag")
       }
+
       await web.dispose()
     }
   })

@@ -12,6 +12,7 @@ export default Stack(
   // @ts-expect-error -- the initialized Worker test proves the complete Layer is provided at runtime.
   Effect.gen(function* () {
     const api = yield* KronikApi
+
     return { api: api.url }
   }).pipe(
     // This fixture stack is the initialized Worker's local composition root.

@@ -20,7 +20,9 @@ export const latestTestLayer = (service: UserActivity.LatestInterface) =>
       const handlers = LatestCommitRpcs.toLayer({
         latestCommit: ({ username }) => fresh(service.latestCommit(username)),
       })
+
       const client = yield* RpcTest.makeClient(LatestCommitRpcs).pipe(Effect.provide(handlers))
+
       return UserActivity.LatestService.of({
         latestCommit: Effect.fn("UserActivity.latestCommit.testRpc")(function* (username) {
           return yield* client.latestCommit({ username }).pipe(Effect.map(({ value }) => value))
@@ -39,7 +41,9 @@ export const summaryTestLayer = (service: UserActivity.SummaryInterface) =>
         commits: (input) => fresh(service.commits(input)),
         summary: (input) => fresh(service.summarize(input)),
       })
+
       const client = yield* RpcTest.makeClient(SummaryRpcs).pipe(Effect.provide(handlers))
+
       return UserActivity.SummaryService.of({
         latestCommit: Effect.fn("UserActivity.latestCommit.testSummaryRpc")(function* (username) {
           return yield* client.latestCommit({ username }).pipe(Effect.map(({ value }) => value))
@@ -51,6 +55,7 @@ export const summaryTestLayer = (service: UserActivity.SummaryInterface) =>
               : input.limit !== undefined
                 ? { username: input.username, limit: input.limit }
                 : { username: input.username }
+
           return yield* client.commits(payload).pipe(Effect.map(({ value }) => value))
         }),
         summarize: Effect.fn("UserActivity.summarize.testSummaryRpc")(function* (input) {
@@ -62,6 +67,7 @@ export const summaryTestLayer = (service: UserActivity.SummaryInterface) =>
                 : input.to !== undefined
                   ? { username: input.username, to: input.to }
                   : { username: input.username }
+
           return yield* client.summary(payload).pipe(Effect.map(({ value }) => value))
         }),
       })
@@ -79,7 +85,9 @@ export const streakTestLayer = (service: UserActivity.StreakInterface) =>
         summary: (input) => fresh(service.summarize(input)),
         streak: ({ username }) => fresh(service.streak(username)),
       })
+
       const client = yield* RpcTest.makeClient(StreakRpcs).pipe(Effect.provide(handlers))
+
       return UserActivity.StreakService.of({
         latestCommit: Effect.fn("UserActivity.latestCommit.testStreakRpc")(function* (username) {
           return yield* client.latestCommit({ username }).pipe(Effect.map(({ value }) => value))
@@ -91,6 +99,7 @@ export const streakTestLayer = (service: UserActivity.StreakInterface) =>
               : input.limit !== undefined
                 ? { username: input.username, limit: input.limit }
                 : { username: input.username }
+
           return yield* client.commits(payload).pipe(Effect.map(({ value }) => value))
         }),
         summarize: Effect.fn("UserActivity.summarize.testStreakRpc")(function* (input) {
@@ -102,6 +111,7 @@ export const streakTestLayer = (service: UserActivity.StreakInterface) =>
                 : input.to !== undefined
                   ? { username: input.username, to: input.to }
                   : { username: input.username }
+
           return yield* client.summary(payload).pipe(Effect.map(({ value }) => value))
         }),
         streak: Effect.fn("UserActivity.streak.testRpc")(function* (username) {
@@ -120,7 +130,9 @@ export const commitsTestLayer = (service: UserActivity.CommitsInterface) =>
         latestCommit: ({ username }) => fresh(service.latestCommit(username)),
         commits: (input) => fresh(service.commits(input)),
       })
+
       const client = yield* RpcTest.makeClient(CommitRpcs).pipe(Effect.provide(handlers))
+
       return UserActivity.CommitsService.of({
         latestCommit: Effect.fn("UserActivity.latestCommit.testCommitRpc")(function* (username) {
           return yield* client.latestCommit({ username }).pipe(Effect.map(({ value }) => value))
@@ -132,6 +144,7 @@ export const commitsTestLayer = (service: UserActivity.CommitsInterface) =>
               : input.limit !== undefined
                 ? { username: input.username, limit: input.limit }
                 : { username: input.username }
+
           return yield* client.commits(payload).pipe(Effect.map(({ value }) => value))
         }),
       })

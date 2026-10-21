@@ -5,6 +5,7 @@ import { OpenApi } from "effect/http-api"
 import { Api } from "../src/api.js"
 
 const document = `${JSON.stringify(OpenApi.fromApi(Api), null, 2)}\n`
+
 const target = new URL("../openapi.json", import.meta.url)
 
 if (process.argv.includes("--check")) {
@@ -14,6 +15,7 @@ if (process.argv.includes("--check")) {
     )
     process.exit(1)
   }
+
   process.exit(0)
 }
 

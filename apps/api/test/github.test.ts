@@ -12,26 +12,37 @@ import { Effect, Layer, Option, Redacted, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 
 const sha = "0123456789abcdef0123456789abcdef01234567"
+
 const snapshot = Schema.decodeUnknownSync(IsoTimestamp)("2026-01-02T04:00:00Z")
+
 const activityFrom = Schema.decodeUnknownSync(IsoDate)("2026-01-01")
+
 const activityTo = Schema.decodeUnknownSync(IsoDate)("2026-01-30")
+
 const username = Schema.decodeUnknownSync(GitHubUsername)("MixedUser")
+
 const commitSha = Schema.decodeUnknownSync(CommitSha)(sha)
+
 const contributionFrom = "2025-01-02"
+
 const contributionTo = "2026-01-01"
+
 const streakFrom = Schema.decodeUnknownSync(IsoDate)(contributionFrom)
+
 const streakTo = Schema.decodeUnknownSync(IsoDate)(contributionTo)
+
 const contributionDays = Array.from({ length: 365 }, (_, index) => ({
   date: new Date(Date.parse(`${contributionFrom}T00:00:00Z`) + index * 86_400_000)
     .toISOString()
     .slice(0, 10),
   contributionCount: index === 364 ? 1 : 0,
 }))
+
 const contributionWeeks = Array.from({ length: 53 }, (_, index) => ({
   contributionDays: contributionDays.slice(index * 7, index * 7 + 7),
 })).filter((week) => week.contributionDays.length > 0)
 
-const responseFor = (pathname: string): { readonly status: number; readonly body: unknown } => {
+const responseFor = (pathname: string) => {
   if (pathname === "/users/MixedUser") {
     return {
       status: 200,
@@ -42,6 +53,7 @@ const responseFor = (pathname: string): { readonly status: number; readonly body
       },
     }
   }
+
   if (pathname === "/search/commits") {
     return {
       status: 200,
@@ -62,6 +74,7 @@ const responseFor = (pathname: string): { readonly status: number; readonly body
       },
     }
   }
+
   if (pathname === "/graphql") {
     return {
       status: 200,
@@ -76,9 +89,11 @@ const responseFor = (pathname: string): { readonly status: number; readonly body
       },
     }
   }
+
   if (pathname.endsWith("/languages")) {
     return { status: 200, body: { TypeScript: 100, JavaScript: 50 } }
   }
+
   return {
     status: 200,
     body: {
@@ -97,6 +112,7 @@ const responseFor = (pathname: string): { readonly status: number; readonly body
 
 const fakeClient = HttpClient.make((request, url) => {
   const fixture = responseFor(url.pathname)
+
   return Effect.succeed(
     HttpClientResponse.fromWeb(
       request,
@@ -125,8 +141,9 @@ const concurrencyClient = (() => {
   let hydrationActive = 0
   let hydrationMaximum = 0
   let languageCalls = 0
+
   const client = HttpClient.make((request, url) => {
-    const response = (body: unknown) =>
+    const response = (body: Schema.Json) =>
       HttpClientResponse.fromWeb(
         request,
         new Response(JSON.stringify(body), {
@@ -134,6 +151,7 @@ const concurrencyClient = (() => {
           headers: { "content-type": "application/json", "x-ratelimit-remaining": "4999" },
         }),
       )
+
     if (url.pathname === "/users/MixedUser")
       return Effect.succeed(
         response({
@@ -142,6 +160,7 @@ const concurrencyClient = (() => {
           avatar_url: "https://avatars.githubusercontent.com/u/1",
         }),
       )
+
     if (url.pathname === "/search/commits")
       return Effect.succeed(
         response({
@@ -158,23 +177,29 @@ const concurrencyClient = (() => {
           })),
         }),
       )
+
     if (url.pathname.endsWith("/languages")) {
       languageCalls += 1
       active += 1
       maximum = Math.max(maximum, active)
+
       return Effect.promise(() =>
         Promise.resolve().then(() => {
           active -= 1
+
           return response({ TypeScript: 100, JavaScript: 50 })
         }),
       )
     }
+
     const repository = url.pathname.split("/")[3]
     hydrationActive += 1
     hydrationMaximum = Math.max(hydrationMaximum, hydrationActive)
+
     return Effect.promise(() =>
       Promise.resolve().then(() => {
         hydrationActive -= 1
+
         return response({
           sha,
           html_url: `https://github.com/owner/${repository}/commit/${sha}`,
@@ -193,6 +218,7 @@ const concurrencyClient = (() => {
       }),
     )
   })
+
   return {
     client,
     maximum: () => maximum,
@@ -206,6 +232,7 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
+
         return yield* github.latestCommit(username)
       }).pipe(
         Effect.provide(
@@ -226,6 +253,7 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
+
         return yield* github.commits({
           username,
           snapshot,
@@ -249,6 +277,7 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
+
         return yield* github.commits({
           username,
           snapshot,
@@ -271,6 +300,7 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
+
         return yield* github.activity({
           username,
           from: activityFrom,
@@ -302,6 +332,7 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
+
         return yield* github.activity({
           username,
           from: activityFrom,
@@ -327,6 +358,7 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
+
         return yield* github.streak({
           username,
           from: streakFrom,
@@ -347,14 +379,17 @@ describe("GitHub adapter", () => {
 
   test("emits safe GitHub operation and rate evidence", async () => {
     const events: Array<Observability.Event> = []
+
     const observability: Observability.Sink = {
       record: (event) => {
         events.push(event)
       },
     }
+
     await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
+
         return yield* github.latestCommit(username)
       }).pipe(
         Effect.provide(
@@ -387,6 +422,7 @@ describe("GitHub adapter", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
+
         return yield* github.latestCommit(username)
       }).pipe(
         Effect.provide(

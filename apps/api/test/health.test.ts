@@ -39,6 +39,7 @@ describe("health walking skeleton", () => {
         ),
       ),
     )
+
     const response = await makeWorkerResponse(
       new Request("https://api.example.test/health"),
       httpEffect,

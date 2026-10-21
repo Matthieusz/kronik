@@ -22,14 +22,17 @@ export const CachedLatestCommit = Schema.Struct({
   value: LatestCommit,
   cacheState: CacheState,
 })
+
 export const CachedCommitPage = Schema.Struct({
   value: CommitPage,
   cacheState: CacheState,
 })
+
 export const CachedActivitySummary = Schema.Struct({
   value: ActivitySummary,
   cacheState: CacheState,
 })
+
 export const CachedContributionStreak = Schema.Struct({
   value: ContributionStreak,
   cacheState: CacheState,
@@ -67,6 +70,7 @@ const commits = Rpc.make("commits", {
   success: CachedCommitPage,
   error: DomainErrors,
 })
+
 const summary = Rpc.make("summary", {
   payload: {
     username: GitHubUsername,
@@ -76,6 +80,7 @@ const summary = Rpc.make("summary", {
   success: CachedActivitySummary,
   error: DomainErrors,
 })
+
 /** The validated payload for a contribution-streak lookup. */
 export const StreakPayload = Schema.Struct({ username: GitHubUsername })
 

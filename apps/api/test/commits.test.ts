@@ -17,6 +17,7 @@ const page = Schema.decodeUnknownSync(CommitPage)({
   previous: null,
   next: "opaque-next-cursor",
 })
+
 const latest = Schema.decodeUnknownSync(LatestCommit)({
   user: page.user,
   commit: {
@@ -40,10 +41,13 @@ const runRoute = async (url: string, service: UserActivity.CommitsInterface) =>
     Effect.scoped(
       Effect.gen(function* () {
         const activity = yield* UserActivity.CommitsService
+
         const web = yield* makeWebHandler(new URL("https://docs.example.test"), {
           commitsService: activity,
         })
+
         const response = yield* Effect.promise(() => web.handler(new Request(url)))
+
         return { status: response.status, body: yield* Effect.promise(() => response.json()) }
       }).pipe(Effect.provide(commitsTestLayer(service))),
     ),
@@ -52,19 +56,23 @@ const runRoute = async (url: string, service: UserActivity.CommitsInterface) =>
 describe("paginated commits public route", () => {
   test("supports initial, default, and continuation query modes", async () => {
     const inputs: Array<unknown> = []
+
     const service: UserActivity.CommitsInterface = {
       latestCommit: () => Effect.succeed(latest),
       commits: (input) => {
         inputs.push(input)
+
         return Effect.succeed(page)
       },
     }
 
     const initial = await runRoute("https://api.example.test/v1/users/MixedUser/commits", service)
+
     const custom = await runRoute(
       "https://api.example.test/v1/users/MixedUser/commits?limit=25",
       service,
     )
+
     const continuation = await runRoute(
       "https://api.example.test/v1/users/MixedUser/commits?cursor=opaque-next-cursor",
       service,

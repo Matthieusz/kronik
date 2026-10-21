@@ -29,23 +29,29 @@ const GitHubUserResponse = Schema.Struct({
   html_url: Schema.String,
   avatar_url: Schema.String,
 })
+
 const SearchRepositoryResponse = Schema.Struct({
   full_name: Schema.String,
   html_url: Schema.String,
 })
+
 const SearchPersonResponse = Schema.Struct({ login: Schema.String })
+
 const SearchCommitResponse = Schema.Struct({
   sha: Schema.String,
   html_url: Schema.String,
   repository: SearchRepositoryResponse,
   author: Schema.NullOr(SearchPersonResponse),
 })
+
 const SearchResponse = Schema.Struct({
   total_count: Schema.optionalKey(Schema.Number),
   incomplete_results: Schema.optionalKey(Schema.Boolean),
   items: Schema.Array(SearchCommitResponse),
 })
+
 const CommitIdentityResponse = Schema.Struct({ date: Schema.String })
+
 const CommitDetailsResponse = Schema.Struct({
   sha: Schema.String,
   html_url: Schema.String,
@@ -65,22 +71,33 @@ const CommitDetailsResponse = Schema.Struct({
     }),
   ),
 })
+
 const LanguageBytes = Schema.Number.pipe(
   Schema.check(Schema.isInt()),
   Schema.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
 )
+
 const RateHeaders = Schema.Struct({
   "x-ratelimit-remaining": Schema.optionalKey(Schema.String),
   "retry-after": Schema.optionalKey(Schema.String),
 })
+
 const LanguageResponse = Schema.Record(Schema.String, LanguageBytes)
+
+interface ContributionQuery {
+  readonly query: string
+  readonly variables: { readonly login: string; readonly from: string; readonly to: string }
+}
+
 const ContributionDayResponse = Schema.Struct({
   date: Schema.String,
   contributionCount: Schema.Number,
 })
+
 const ContributionCalendarResponse = Schema.Struct({
   weeks: Schema.Array(Schema.Struct({ contributionDays: Schema.Array(ContributionDayResponse) })),
 })
+
 const ContributionGraphqlResponse = Schema.Struct({
   data: Schema.Struct({
     user: Schema.NullOr(
@@ -93,16 +110,20 @@ const ContributionGraphqlResponse = Schema.Struct({
   }),
   errors: Schema.optionalKey(Schema.Array(Schema.Struct({ message: Schema.String }))),
 })
+
 const ContributionCount = Schema.Number.pipe(
   Schema.check(Schema.isInt()),
   Schema.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
 )
+
 /** Keep independent commit-hydration requests bounded for the shared GitHub budget. */
 const CommitHydrationConcurrency = 8
+
 /** Keep independent repository-language requests bounded for the shared GitHub budget. */
 const LanguageConcurrency = 4
 
 type SearchResponse = typeof SearchResponse.Type
+
 type CommitDetailsResponse = typeof CommitDetailsResponse.Type
 
 /** The semantic page request passed from the coordinator to the GitHub adapter. */
@@ -183,6 +204,7 @@ const decodeResponse =
       const body = yield* response.json.pipe(
         Effect.mapError((cause) => new ProviderFailure({ operation, kind: "malformed", cause })),
       )
+
       return yield* Schema.decodeUnknownEffect(schema)(body).pipe(
         Effect.mapError((cause) => new ProviderFailure({ operation, kind: "malformed", cause })),
       )
@@ -192,11 +214,13 @@ const AuthorizationFailureDetail = "Kronik's GitHub credential was rejected"
 
 const classifyProviderFailure = (failure: ProviderFailure): ApiError.DomainErrors => {
   const instance = "urn:kronik:github"
+
   const common = {
     type: "https://kronik.dev/problems/upstream-failure",
     title: "GitHub unavailable",
     instance,
   }
+
   if (failure.kind === "status" && (failure.status === 401 || failure.status === 403)) {
     return new ApiError.UpstreamFailure({
       ...common,
@@ -204,6 +228,7 @@ const classifyProviderFailure = (failure: ProviderFailure): ApiError.DomainError
       status: 502,
     })
   }
+
   if (failure.kind === "rate") {
     return new ApiError.RateLimited({
       ...common,
@@ -214,6 +239,7 @@ const classifyProviderFailure = (failure: ProviderFailure): ApiError.DomainError
       title: "Upstream rate limit reached",
     })
   }
+
   if (failure.kind === "timeout") {
     return new ApiError.ServiceUnavailable({
       ...common,
@@ -223,6 +249,7 @@ const classifyProviderFailure = (failure: ProviderFailure): ApiError.DomainError
       title: "Service unavailable",
     })
   }
+
   return new ApiError.UpstreamFailure({
     ...common,
     detail: "GitHub returned an unusable response",
@@ -243,11 +270,13 @@ const retrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.jittered,
   Schedule.upTo({ times: 1 }),
 )
+
 const silentObservability: Observability.Sink = { record: () => undefined }
 
 const safeHeaderInteger = (value: string | undefined): number | undefined => {
   if (value === undefined) return undefined
   const parsed = Number.parseInt(value, 10)
+
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined
 }
 
@@ -258,25 +287,31 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
   const rawClient = yield* HttpClient
   const configuration = yield* Configuration
   const client = mapRequest(rawClient, prependUrl(configuration.githubBaseUrl.toString()))
+
   const headers = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": configuration.githubUserAgent,
   }
+
   const request = Effect.fn("GitHub.request")(function* (
     operation: Observability.GitHubOperation,
     path: string,
-    body?: unknown,
+    body?: ContributionQuery,
   ) {
     const token = configuration.githubToken
+
     if (Option.isNone(token))
       return yield* Effect.fail(new ProviderFailure({ operation, kind: "status", status: 401 }))
+
     const authorizedHeaders = {
       ...headers,
       Authorization: `Bearer ${Redacted.value(token.value)}`,
     }
+
     const clock = yield* Clock.Clock
     const startedAt = yield* clock.currentTimeMillis
+
     const attempt = Effect.gen(function* () {
       const responseEffect =
         body === undefined
@@ -285,6 +320,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
               headers: authorizedHeaders,
               body: bodyJsonUnsafe(empty, body).body,
             })
+
       const response = yield* responseEffect.pipe(
         Effect.timeout("5 seconds"),
         Effect.catchTag("TimeoutError", () =>
@@ -296,6 +332,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
             : new ProviderFailure({ operation, kind: "transport", cause }),
         ),
       )
+
       yield* Effect.annotateCurrentSpan("github.status", response.status)
 
       const rateHeaders = yield* Schema.decodeUnknownEffect(RateHeaders)(response.headers).pipe(
@@ -309,13 +346,17 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
             }),
         ),
       )
+
       const remainingValue = rateHeaders["x-ratelimit-remaining"]
       const rateRemaining = safeHeaderInteger(remainingValue)
       const retryAfterValue = rateHeaders["retry-after"]
+
       const retryAfterSeconds =
         retryAfterValue === undefined ? 60 : Number.parseInt(retryAfterValue, 10)
+
       const rateLimited =
         response.status === 429 || (response.status === 403 && remainingValue === "0")
+
       if (rateLimited) {
         return yield* Effect.fail(
           new ProviderFailure({
@@ -329,11 +370,13 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
           }),
         )
       }
+
       if (response.status < 200 || response.status >= 300) {
         return yield* Effect.fail(
           new ProviderFailure({ operation, kind: "status", status: response.status }),
         )
       }
+
       return { response, rateRemaining }
     }).pipe(
       Effect.provideService(TracerDisabledWhen, () => true),
@@ -344,29 +387,35 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       Effect.tap(({ rateRemaining, response }) =>
         Effect.gen(function* () {
           const finishedAt = yield* clock.currentTimeMillis
-          yield* observe(observability, {
+
+          const event: Observability.GitHubRequestEvent = {
             kind: "github.request",
             operation,
             outcome: "success",
             latencyMs: Math.max(0, finishedAt - startedAt),
             status: response.status,
-            ...(rateRemaining === undefined ? {} : { rateRemaining }),
-          })
+          }
+
+          if (rateRemaining !== undefined) Object.assign(event, { rateRemaining })
+          yield* observe(observability, event)
         }),
       ),
       Effect.tapError((failure) =>
         Effect.gen(function* () {
           const finishedAt = yield* clock.currentTimeMillis
-          yield* observe(observability, {
+
+          const event: Observability.GitHubRequestEvent = {
             kind: "github.request",
             operation,
             outcome: failure.kind,
             latencyMs: Math.max(0, finishedAt - startedAt),
-            ...(failure.status === undefined ? {} : { status: failure.status }),
-            ...(failure.retryAfterSeconds === undefined
-              ? {}
-              : { retryAfterSeconds: failure.retryAfterSeconds }),
-          })
+          }
+
+          if (failure.status !== undefined) Object.assign(event, { status: failure.status })
+
+          if (failure.retryAfterSeconds !== undefined)
+            Object.assign(event, { retryAfterSeconds: failure.retryAfterSeconds })
+          yield* observe(observability, event)
         }),
       ),
       Effect.map(({ response }) => response),
@@ -377,7 +426,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     operation: Observability.GitHubOperation,
     path: string,
     schema: S,
-    body?: unknown,
+    body?: ContributionQuery,
   ) =>
     request(operation, path, body).pipe(
       Effect.retry({
@@ -412,6 +461,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
             : failure,
       ),
     )
+
     return yield* Schema.decodeUnknownEffect(User)({
       login: response.login,
       url: response.html_url,
@@ -438,11 +488,13 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     window?: { readonly from: IsoDate; readonly to: IsoDate },
   ) {
     const qualifiers = [`author:${user.login}`]
+
     if (window !== undefined) {
       qualifiers.push(`committer-date:>=${window.from}`)
       qualifiers.push(`committer-date:<=${window.to}`)
     } else if (snapshot !== undefined) qualifiers.push(`committer-date:<=${snapshot}`)
     const query = encodeURIComponent(qualifiers.join(" "))
+
     return yield* requestJson(
       "GitHub.searchCommits",
       `/search/commits?q=${query}&sort=committer-date&order=desc&per_page=${pageSize}&page=${position}`,
@@ -460,6 +512,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     const parts = item.repository.full_name.split("/")
     const owner = parts[0]
     const name = parts[1]
+
     if (
       parts.length !== 2 ||
       owner === undefined ||
@@ -469,9 +522,11 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     ) {
       return yield* Effect.fail(invalidUpstream("GitHub returned an unrepresentable repository"))
     }
+
     const sha = yield* Schema.decodeUnknownEffect(CommitSha)(item.sha).pipe(
       Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable commit SHA")),
     )
+
     const details = yield* requestJson(
       "GitHub.hydrateCommit",
       `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${encodeURIComponent(sha)}`,
@@ -481,6 +536,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
         failure instanceof ProviderFailure ? classifyProviderFailure(failure) : failure,
       ),
     )
+
     return { sha, details, repository: item.repository }
   })
 
@@ -493,24 +549,30 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     },
   ) {
     const details = hydrated.details
+
     const repository = yield* Schema.decodeUnknownEffect(Repository)({
       nameWithOwner: hydrated.repository.full_name,
       url: hydrated.repository.html_url,
     }).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable repository")))
+
     const parents = yield* Effect.forEach(details.parents, (parent) =>
       Schema.decodeUnknownEffect(CommitParent)({ sha: parent.sha, url: parent.html_url }).pipe(
         Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable parent")),
       ),
     )
+
     const authoredAt = yield* Schema.decodeUnknownEffect(IsoTimestamp)(
       details.commit.author.date,
     ).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an invalid author timestamp")))
+
     const committedAt = yield* Schema.decodeUnknownEffect(IsoTimestamp)(
       details.commit.committer.date,
     ).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an invalid committer timestamp")))
+
     const commitUrl = yield* Schema.decodeUnknownEffect(Repository.fields.url)(
       details.html_url,
     ).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an invalid commit URL")))
+
     return {
       user,
       sha: hydrated.sha,
@@ -529,6 +591,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     const parts = repository.nameWithOwner.split("/")
     const owner = parts[0]
     const name = parts[1]
+
     if (
       parts.length !== 2 ||
       owner === undefined ||
@@ -552,6 +615,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
         failure instanceof ProviderFailure ? classifyProviderFailure(failure) : failure,
       ),
     )
+
     return {
       nameWithOwner: repository.nameWithOwner,
       languages: Object.entries(response).map(([languageName, bytes]) => ({
@@ -563,6 +627,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
 
   const contributionStreak = Effect.fn("GitHub.contributionStreak")(function* (input: StreakInput) {
     const user = yield* resolveUser(input.username)
+
     const query = `query($login: String!, $from: DateTime!, $to: DateTime!) {
       user(login: $login) {
         contributionsCollection(from: $from, to: $to) {
@@ -574,6 +639,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
         }
       }
     }`
+
     const response = yield* requestJson(
       "GitHub.contributionStreak",
       "/graphql",
@@ -591,9 +657,11 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
         failure instanceof ProviderFailure ? classifyProviderFailure(failure) : failure,
       ),
     )
+
     if (response.errors !== undefined && response.errors.length > 0)
       return yield* Effect.fail(invalidUpstream("GitHub returned GraphQL errors"))
     const graphUser = response.data.user
+
     if (graphUser === null)
       return yield* Effect.fail(
         new ApiError.UserNotFound({
@@ -604,35 +672,43 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
           status: 404,
         }),
       )
+
     const rawDays = graphUser.contributionsCollection.contributionCalendar.weeks.flatMap(
       (week) => week.contributionDays,
     )
+
     const days = yield* Effect.forEach(rawDays, (day) =>
       Effect.gen(function* () {
         const date = yield* Schema.decodeUnknownEffect(IsoDate)(day.date).pipe(
           Effect.mapError(() => invalidUpstream("GitHub returned an invalid contribution date")),
         )
+
         const contributionCount = yield* Schema.decodeUnknownEffect(ContributionCount)(
           day.contributionCount,
         ).pipe(
           Effect.mapError(() => invalidUpstream("GitHub returned an invalid contribution count")),
         )
+
         return { date, contributionCount }
       }),
     )
+
     if (!StreakDomain.isRepresentedRange(input.from, input.to, days))
       return yield* Effect.fail(
         invalidUpstream("GitHub returned an incomplete contribution calendar"),
       )
+
     return { user, days }
   })
 
   const latestCommit = Effect.fn("GitHub.latestCommit")(function* (username: GitHubUsername) {
     const user = yield* resolveUser(username)
     const search = yield* searchCommits(user, 10, 1)
+
     const item = search.items.find(
       (candidate) => candidate.author?.login.toLowerCase() === user.login.toLowerCase(),
     )
+
     if (item === undefined) {
       return yield* Effect.fail(
         new ApiError.LatestCommitNotFound({
@@ -644,9 +720,11 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
         }),
       )
     }
+
     const hydrated = yield* hydrateCommit(item)
     const evidence = yield* toEvidence(user, hydrated)
     const projected = CommitDomain.projectLatest(evidence)
+
     if (Result.isFailure(projected)) {
       return yield* Effect.fail(
         new ApiError.UpstreamFailure({
@@ -658,34 +736,44 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
         }),
       )
     }
+
     return projected.success
   })
 
   const activity = Effect.fn("GitHub.activity")(function* (input: ActivityInput) {
     const user = yield* resolveUser(input.username)
+
     const search = yield* searchCommits(user, 100, 1, undefined, {
       from: input.from,
       to: input.to,
     })
+
     const matchingItems = search.items
       .filter((candidate) => candidate.author?.login.toLowerCase() === user.login.toLowerCase())
       .slice(0, 100)
+
     const items = yield* Effect.forEach(
       matchingItems,
       (item) => hydrateCommit(item).pipe(Effect.flatMap((hydrated) => toEvidence(user, hydrated))),
       { concurrency: CommitHydrationConcurrency },
     )
+
     const repositories = new Map<string, Repository>()
+
     for (const item of items) repositories.set(item.repository.nameWithOwner, item.repository)
+
     const repositoryLanguages = yield* Effect.forEach(
       [...repositories.values()],
       (repository) => getLanguages(repository),
       { concurrency: LanguageConcurrency },
     )
+
     const totalCount = search.total_count ?? matchingItems.length
+
     if (!Number.isSafeInteger(totalCount) || totalCount < 0) {
       return yield* Effect.fail(invalidUpstream("GitHub returned an invalid activity total"))
     }
+
     return {
       user,
       items,
@@ -706,24 +794,32 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     ) {
       return yield* Effect.fail(invalidUpstream("Kronik produced an invalid search page"))
     }
+
     const user = yield* resolveUser(input.username)
     const search = yield* searchCommits(user, input.pageSize, input.position, input.snapshot)
+
     const matchingItems = search.items.filter(
       (candidate) => candidate.author?.login.toLowerCase() === user.login.toLowerCase(),
     )
+
     const items = yield* Effect.forEach(
       matchingItems,
       (item) => hydrateCommit(item).pipe(Effect.flatMap((hydrated) => toEvidence(user, hydrated))),
       { concurrency: CommitHydrationConcurrency },
     )
+
     const totalCount = search.total_count ?? search.items.length
+
     if (!Number.isSafeInteger(totalCount) || totalCount < 0) {
       return yield* Effect.fail(invalidUpstream("GitHub returned an invalid search total"))
     }
+
     const sortedItems = items.toSorted((left, right) => {
       const committedAt = String(right.committedAt).localeCompare(String(left.committedAt))
+
       return committedAt === 0 ? String(left.sha).localeCompare(String(right.sha)) : committedAt
     })
+
     return {
       user,
       items: sortedItems,

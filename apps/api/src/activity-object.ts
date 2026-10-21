@@ -27,6 +27,7 @@ import {
   Effect,
   Exit,
   Layer,
+  Match,
   Option,
   Result,
   Schema,
@@ -44,7 +45,14 @@ export interface ActivityStorage {
   /** Read one persisted value from the Durable Object. */
   readonly get: (key: string) => Effect.Effect<unknown, never, RuntimeContext>
   /** Persist one value in the Durable Object. */
-  readonly put: (key: string, value: unknown) => Effect.Effect<void, never, RuntimeContext>
+  readonly put: (
+    key: string,
+    value:
+      | StoredRecord
+      | typeof StoredPage.Type
+      | typeof StoredSummary.Type
+      | typeof StoredStreak.Type,
+  ) => Effect.Effect<void, never, RuntimeContext>
   /** Remove one malformed or obsolete persisted value. */
   readonly delete: (key: string) => Effect.Effect<boolean, never, RuntimeContext>
 }
@@ -63,12 +71,19 @@ export class ActivityState extends Context.Service<ActivityState, ActivityObject
 ) {}
 
 const FreshTtlMs = 60_000
+
 const ActivityFreshTtlMs = 300_000
+
 const StreakFreshTtlMs = 300_000
+
 const StaleTtlMs = 3_600_000
+
 const StorageKey = "latest-commit-v1"
+
 const StreakStoragePrefix = "contribution-streak-v1:"
+
 const DefaultPageSize = 10
+
 const SearchBoundary = 1_000
 
 const StoredSuccess = Schema.Struct({
@@ -76,12 +91,15 @@ const StoredSuccess = Schema.Struct({
   savedAt: Schema.Number,
   value: LatestCommit,
 })
+
 const StoredNegative = Schema.Struct({
   kind: Schema.Literal("user-not-found"),
   savedAt: Schema.Number,
   user: Schema.optionalKey(User),
 })
+
 const StoredRecord = Schema.Union([StoredSuccess, StoredNegative])
+
 type StoredRecord = typeof StoredRecord.Type
 
 const PageRequest = Schema.Struct({
@@ -90,6 +108,7 @@ const PageRequest = Schema.Struct({
   pageSize: Schema.Number,
   position: Schema.Number,
 })
+
 type PageRequest = typeof PageRequest.Type
 
 const StoredPage = Schema.Struct({
@@ -97,21 +116,25 @@ const StoredPage = Schema.Struct({
   savedAt: Schema.Number,
   value: CommitPage,
 })
+
 const ActivityRequest = Schema.Struct({
   username: GitHubUsername,
   from: IsoDate,
   to: IsoDate,
 })
+
 const StoredSummary = Schema.Struct({
   kind: Schema.Literal("success"),
   savedAt: Schema.Number,
   value: ActivitySummary,
 })
+
 const StreakRequest = Schema.Struct({
   username: GitHubUsername,
   from: IsoDate,
   to: IsoDate,
 })
+
 const StoredStreak = Schema.Struct({
   kind: Schema.Literal("success"),
   savedAt: Schema.Number,
@@ -122,14 +145,17 @@ type LookupResult = {
   readonly value: LatestCommit
   readonly cacheState: "fresh" | "stale"
 }
+
 type PageLookupResult = {
   readonly value: CommitPage
   readonly cacheState: "fresh" | "stale"
 }
+
 type SummaryLookupResult = {
   readonly value: ActivitySummary
   readonly cacheState: "fresh" | "stale"
 }
+
 type StreakLookupResult = {
   readonly value: ContributionStreak
   readonly cacheState: "fresh" | "stale"
@@ -171,14 +197,21 @@ const upstreamFailure = (detail: string) =>
     status: 502,
   })
 
-const normalizeActivityError = (error: unknown): ApiError.DomainErrors => {
+const normalizeActivityError = (error: ApiError.DomainErrors): ApiError.DomainErrors => {
   if (error instanceof ApiError.InvalidRequest) return error
+
   if (error instanceof ApiError.InvalidCursor) return error
+
   if (error instanceof ApiError.UserNotFound) return error
+
   if (error instanceof ApiError.LatestCommitNotFound) return error
+
   if (error instanceof ApiError.RateLimited) return error
+
   if (error instanceof ApiError.ServiceUnavailable) return error
+
   if (error instanceof ApiError.UpstreamFailure) return error
+
   return new ApiError.UpstreamFailure({
     type: "https://kronik.dev/problems/upstream-failure",
     title: "Activity coordinator failure",
@@ -206,36 +239,25 @@ const pageStorageKey = (key: string): string => `commits-page-v1:${key}`
 
 const decodeActivityKey = (key: string) =>
   Effect.gen(function* () {
-    const value = yield* Effect.try({
-      try: (): unknown => JSON.parse(key),
-      catch: () => upstreamFailure("Kronik produced an invalid activity cache key"),
-    })
-    return yield* Schema.decodeUnknownEffect(ActivityRequest)(value).pipe(
+    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ActivityRequest))(key).pipe(
       Effect.mapError(() => upstreamFailure("Kronik produced an invalid activity cache key")),
     )
   })
 
 const activityStorageKey = (key: string): string => `activity-summary-v1:${key}`
+
 const streakStorageKey = (key: string): string => `${StreakStoragePrefix}${key}`
 
 const decodeStreakKey = (key: string) =>
   Effect.gen(function* () {
-    const value = yield* Effect.try({
-      try: (): unknown => JSON.parse(key),
-      catch: () => upstreamFailure("Kronik produced an invalid streak cache key"),
-    })
-    return yield* Schema.decodeUnknownEffect(StreakRequest)(value).pipe(
+    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(StreakRequest))(key).pipe(
       Effect.mapError(() => upstreamFailure("Kronik produced an invalid streak cache key")),
     )
   })
 
 const decodePageKey = (key: string) =>
   Effect.gen(function* () {
-    const value = yield* Effect.try({
-      try: (): unknown => JSON.parse(key),
-      catch: () => upstreamFailure("Kronik produced an invalid page cache key"),
-    })
-    return yield* Schema.decodeUnknownEffect(PageRequest)(value).pipe(
+    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PageRequest))(key).pipe(
       Effect.mapError(() => upstreamFailure("Kronik produced an invalid page cache key")),
     )
   })
@@ -245,6 +267,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
   const state = yield* ActivityState
   const github = yield* GitHub.Service
   const cursor = yield* Cursor.Service
+
   const latestCache = yield* Cache.makeWith<
     GitHubUsername,
     LookupResult,
@@ -256,10 +279,12 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
         const clock = yield* Clock.Clock
         const now = yield* clock.currentTimeMillis
         const storedValue = yield* state.storage.get(StorageKey)
+
         const stored =
           storedValue === undefined
             ? Option.none<StoredRecord>()
             : Schema.decodeUnknownOption(StoredRecord)(storedValue)
+
         if (storedValue !== undefined && Option.isNone(stored)) {
           yield* state.storage.delete(StorageKey)
         }
@@ -271,6 +296,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
 
         if (fresh && record !== undefined) {
           if (record.kind !== "success") return yield* Effect.fail(userNotFound())
+
           return { value: record.value, cacheState: "fresh" as const }
         }
 
@@ -299,6 +325,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
             ),
           )
         }
+
         return yield* live
       }),
     {
@@ -307,6 +334,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
         if (Exit.isSuccess(exit))
           return exit.value.cacheState === "fresh" ? Duration.millis(FreshTtlMs) : Duration.zero
         const error = Cause.findError(exit.cause)
+
         return Result.isSuccess(error) && error.success instanceof ApiError.UserNotFound
           ? Duration.millis(FreshTtlMs)
           : Duration.zero
@@ -327,10 +355,12 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
         const now = yield* clock.currentTimeMillis
         const storageKey = pageStorageKey(key)
         const storedValue = yield* state.storage.get(storageKey)
+
         const stored =
           storedValue === undefined
             ? Option.none<typeof StoredPage.Type>()
             : Schema.decodeUnknownOption(StoredPage)(storedValue)
+
         if (storedValue !== undefined && Option.isNone(stored)) {
           yield* state.storage.delete(storageKey)
         }
@@ -339,6 +369,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
         const age = record === undefined ? undefined : now - record.savedAt
         const fresh = age !== undefined && age >= 0 && age <= FreshTtlMs
         const staleEligible = age !== undefined && age > FreshTtlMs && age <= StaleTtlMs
+
         if (fresh && record !== undefined) {
           return { value: record.value, cacheState: "fresh" as const }
         }
@@ -367,6 +398,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
             ),
           )
         }
+
         return yield* live
       }),
     {
@@ -391,10 +423,12 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
         const now = yield* clock.currentTimeMillis
         const storageKey = activityStorageKey(key)
         const storedValue = yield* state.storage.get(storageKey)
+
         const stored =
           storedValue === undefined
             ? Option.none<typeof StoredSummary.Type>()
             : Schema.decodeUnknownOption(StoredSummary)(storedValue)
+
         if (storedValue !== undefined && Option.isNone(stored)) {
           yield* state.storage.delete(storageKey)
         }
@@ -403,6 +437,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
         const age = record === undefined ? undefined : now - record.savedAt
         const fresh = age !== undefined && age >= 0 && age <= ActivityFreshTtlMs
         const staleEligible = age !== undefined && age > ActivityFreshTtlMs && age <= StaleTtlMs
+
         if (fresh && record !== undefined) {
           return { value: record.value, cacheState: "fresh" as const }
         }
@@ -426,6 +461,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
             ),
           )
         }
+
         return yield* live
       }),
     {
@@ -450,10 +486,12 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
         const now = yield* clock.currentTimeMillis
         const storageKey = streakStorageKey(key)
         const storedValue = yield* state.storage.get(storageKey)
+
         const stored =
           storedValue === undefined
             ? Option.none<typeof StoredStreak.Type>()
             : Schema.decodeUnknownOption(StoredStreak)(storedValue)
+
         if (storedValue !== undefined && Option.isNone(stored)) {
           yield* state.storage.delete(storageKey)
         }
@@ -462,6 +500,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
         const age = record === undefined ? undefined : now - record.savedAt
         const fresh = age !== undefined && age >= 0 && age <= StreakFreshTtlMs
         const staleEligible = age !== undefined && age > StreakFreshTtlMs && age <= StaleTtlMs
+
         if (fresh && record !== undefined) {
           return { value: record.value, cacheState: "fresh" as const }
         }
@@ -483,6 +522,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
             ),
           )
         }
+
         return yield* live
       }),
     {
@@ -499,14 +539,17 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
       Effect.gen(function* () {
         const objectName = state.objectName
         const requestedName = payload.username.toLowerCase()
+
         if (objectName !== undefined && objectName.toLowerCase() !== requestedName) {
           return yield* Effect.fail(
             invalidRequest("The RPC username does not match the Durable Object identity"),
           )
         }
+
         const normalizedUsername = yield* Schema.decodeUnknownEffect(GitHubUsername)(
           requestedName,
         ).pipe(Effect.mapError(() => invalidRequest("The RPC username is not valid")))
+
         return yield* Cache.get(latestCache, normalizedUsername).pipe(
           Effect.mapError(normalizeActivityError),
         )
@@ -515,21 +558,26 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
       Effect.gen(function* () {
         const objectName = state.objectName
         const requestedName = payload.username.toLowerCase()
+
         if (objectName !== undefined && objectName.toLowerCase() !== requestedName) {
           return yield* Effect.fail(
             invalidRequest("The RPC username does not match the Durable Object identity"),
           )
         }
+
         const normalizedUsername = yield* Schema.decodeUnknownEffect(GitHubUsername)(
           requestedName,
         ).pipe(Effect.mapError(() => invalidRequest("The RPC username is not valid")))
+
         const cursorPayload =
           payload.cursor === undefined
             ? yield* cursor.initial(normalizedUsername, payload.limit ?? DefaultPageSize)
             : yield* cursor.decode(payload.cursor, normalizedUsername)
+
         if (payload.cursor !== undefined && payload.limit !== undefined) {
           return yield* Effect.fail(invalidRequest("A cursor cannot be combined with a limit"))
         }
+
         if (cursorPayload.position * cursorPayload.pageSize > SearchBoundary) {
           return yield* Effect.fail(
             new ApiError.InvalidCursor({
@@ -541,12 +589,14 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
             }),
           )
         }
+
         const request: PageRequest = {
           username: normalizedUsername,
           snapshot: cursorPayload.snapshot,
           pageSize: cursorPayload.pageSize,
           position: cursorPayload.position,
         }
+
         return yield* Cache.get(pageCache, pageKey(request)).pipe(
           Effect.mapError(normalizeActivityError),
         )
@@ -555,16 +605,20 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
       Effect.gen(function* () {
         const objectName = state.objectName
         const requestedName = payload.username.toLowerCase()
+
         if (objectName !== undefined && objectName.toLowerCase() !== requestedName) {
           return yield* Effect.fail(
             invalidRequest("The RPC username does not match the Durable Object identity"),
           )
         }
+
         const normalizedUsername = yield* Schema.decodeUnknownEffect(GitHubUsername)(
           requestedName,
         ).pipe(Effect.mapError(() => invalidRequest("The RPC username is not valid")))
+
         const clock = yield* Clock.Clock
         const now = yield* clock.currentTimeMillis
+
         const windowInput =
           payload.from !== undefined && payload.to !== undefined
             ? { from: payload.from, to: payload.to }
@@ -573,21 +627,28 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
               : payload.to !== undefined
                 ? { to: payload.to }
                 : {}
+
         const resolved = ActivityDomain.resolveWindow(windowInput, now)
+
         if (Result.isFailure(resolved)) {
-          const detail =
-            resolved.failure === "window-too-wide"
-              ? "The activity window cannot exceed 90 inclusive UTC dates"
-              : resolved.failure === "window-reversed"
-                ? "The activity window cannot be reversed"
-                : "The activity window requires both from and to bounds"
+          const detail = Match.value(resolved.failure).pipe(
+            Match.when(
+              "window-too-wide",
+              () => "The activity window cannot exceed 90 inclusive UTC dates",
+            ),
+            Match.when("window-reversed", () => "The activity window cannot be reversed"),
+            Match.orElse(() => "The activity window requires both from and to bounds"),
+          )
+
           return yield* Effect.fail(invalidRequest(detail))
         }
+
         const request: typeof ActivityRequest.Type = {
           username: normalizedUsername,
           from: resolved.success.from,
           to: resolved.success.to,
         }
+
         return yield* Cache.get(summaryCache, JSON.stringify(request)).pipe(
           Effect.mapError(normalizeActivityError),
         )
@@ -596,29 +657,36 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
       Effect.gen(function* () {
         const objectName = state.objectName
         const requestedName = payload.username.toLowerCase()
+
         if (objectName !== undefined && objectName.toLowerCase() !== requestedName) {
           return yield* Effect.fail(
             invalidRequest("The RPC username does not match the Durable Object identity"),
           )
         }
+
         const normalizedUsername = yield* Schema.decodeUnknownEffect(GitHubUsername)(
           requestedName,
         ).pipe(Effect.mapError(() => invalidRequest("The RPC username is not valid")))
+
         const clock = yield* Clock.Clock
         const now = yield* clock.currentTimeMillis
         const range = StreakDomain.resolveRange(now)
+
         if (Result.isFailure(range))
           return yield* Effect.fail(upstreamFailure("Kronik could not resolve today's UTC date"))
+
         const request: typeof StreakRequest.Type = {
           username: normalizedUsername,
           from: range.success.from,
           to: range.success.to,
         }
+
         return yield* Cache.get(streakCache, JSON.stringify(request)).pipe(
           Effect.mapError(normalizeActivityError),
         )
       }),
   })
+
   return yield* RpcServer.toHttpEffect(StreakRpcs).pipe(
     // The Durable Object initializer is this RPC server's composition root.
     // oxlint-disable-next-line effecttsgo/strict-effect-provide
@@ -632,6 +700,7 @@ export const ActivityObjectLive = ActivityObject.make(
     const durableState = yield* DurableObjectState
     // Cloudflare has no Durable Object deactivation hook; this instance scope owns its caches.
     const instanceScope = yield* Scope.make()
+
     const initialized = activityRuntime().pipe(
       Effect.provideService(ActivityState, {
         get objectName() {
@@ -641,6 +710,7 @@ export const ActivityObjectLive = ActivityObject.make(
       }),
       Effect.provideService(Scope.Scope, instanceScope),
     )
+
     // The RPC Durable Object API requires the HTTP handler inside one more initializer effect.
     // oxlint-disable-next-line effecttsgo/return-effect-in-gen
     return Effect.succeed(initialized)
@@ -652,8 +722,10 @@ const buildContributionStreak = Effect.fn("ActivityObject.buildContributionStrea
   evidence: GitHub.StreakEvidence,
 ) {
   const projected = StreakDomain.calculate(evidence.user, request.from, request.to, evidence.days)
+
   if (Result.isFailure(projected))
     return yield* Effect.fail(upstreamFailure("GitHub returned a malformed contribution calendar"))
+
   return projected.success
 })
 
@@ -662,9 +734,11 @@ const buildActivitySummary = Effect.fn("ActivityObject.buildActivitySummary")(fu
   evidence: GitHub.ActivityEvidence,
 ) {
   const projected = ActivityDomain.summarize(window, evidence)
+
   if (Result.isFailure(projected)) {
     return yield* Effect.fail(upstreamFailure("GitHub returned unsafe activity evidence"))
   }
+
   return projected.success
 })
 
@@ -675,19 +749,25 @@ const buildCommitPage = Effect.fn("ActivityObject.buildCommitPage")(function* (
 ) {
   const items = yield* Effect.forEach(evidence.items, (item) => {
     const projected = CommitDomain.projectCommit(item)
+
     if (Result.isFailure(projected)) {
       return Effect.fail(upstreamFailure("GitHub returned unsafe change counts"))
     }
+
     return Effect.succeed(projected.success)
   })
+
   const reachable = Math.min(evidence.totalCount, SearchBoundary)
   const pageEnd = request.position * request.pageSize
+
   const hasNext =
     !evidence.incompleteResults &&
     items.length > 0 &&
     request.position < SearchBoundary &&
     pageEnd < reachable
+
   const hasPrevious = request.position > 1
+
   const next = hasNext
     ? yield* cursor.encode({
         version: 1,
@@ -698,6 +778,7 @@ const buildCommitPage = Effect.fn("ActivityObject.buildCommitPage")(function* (
         direction: "forward",
       })
     : null
+
   const previous = hasPrevious
     ? yield* cursor.encode({
         version: 1,
@@ -708,6 +789,7 @@ const buildCommitPage = Effect.fn("ActivityObject.buildCommitPage")(function* (
         direction: "backward",
       })
     : null
+
   return yield* Schema.decodeUnknownEffect(CommitPage)({
     user: evidence.user,
     items,

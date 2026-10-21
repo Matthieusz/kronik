@@ -6,7 +6,9 @@ import { Clock, Effect, Exit, Layer, Redacted, Schema } from "effect"
 import { Cursor } from "../src/cursor.js"
 
 const username = Schema.decodeUnknownSync(GitHubUsername)("MixedUser")
+
 const otherUsername = Schema.decodeUnknownSync(GitHubUsername)("otheruser")
+
 let now = 1_735_776_000_000
 
 const clock: Clock.Clock = {
@@ -34,6 +36,7 @@ describe("commit cursor authority", () => {
         const initial = yield* service.initial(username, 10)
         const value = yield* service.encode(initial)
         const decoded = yield* service.decode(value, username, "forward")
+
         return { value, decoded }
       }).pipe(Effect.provide(cursorLayer)),
     )
@@ -53,6 +56,7 @@ describe("commit cursor authority", () => {
         const altered = yield* Effect.exit(service.decode(tampered, username))
         const otherUser = yield* Effect.exit(service.decode(value, otherUsername))
         const wrongDirection = yield* Effect.exit(service.decode(value, username, "backward"))
+
         return { altered, otherUser, wrongDirection }
       }).pipe(Effect.provide(cursorLayer)),
     )
@@ -67,6 +71,7 @@ describe("commit cursor authority", () => {
       Effect.gen(function* () {
         const service = yield* Cursor.Service
         const initial = yield* service.initial(username, 1)
+
         const final = Cursor.Payload.make({
           version: initial.version,
           username: initial.username,
@@ -75,7 +80,9 @@ describe("commit cursor authority", () => {
           position: 1_000,
           direction: initial.direction,
         })
+
         const value = yield* service.encode(final)
+
         return yield* service.decode(value, username)
       }).pipe(Effect.provide(cursorLayer)),
     )
@@ -90,6 +97,7 @@ describe("commit cursor authority", () => {
         const initial = yield* service.initial(username, 10)
         const value = yield* service.encode(initial)
         now += 60 * 60 * 1000 + 1
+
         return yield* Effect.exit(service.decode(value, username))
       }).pipe(Effect.provide(cursorLayer)),
     )

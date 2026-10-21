@@ -9,3 +9,18 @@
 - Do not use star imports, import aliases, `any`, non-null assertions, unchecked casts, `else`, or global environment reads in application logic.
 - Prefer Bun APIs and `bun:test`. Use deterministic Effect test services and clocks rather than sleeps.
 - Run tests and typechecks from each package directory. Do not deploy, destroy, adopt domains, or modify Cloudflare resources without explicit confirmation.
+
+<!-- effect-solutions:start -->
+
+## Effect Best Practices
+
+**IMPORTANT:** Always consult effect-solutions before writing Effect code.
+
+1. Run `effect-solutions list` to see available guides
+2. Run `effect-solutions show <topic>...` for relevant patterns (supports multiple topics)
+3. Search `~/.local/share/effect-solutions/effect` for real implementations
+
+Topics: quick-start, project-setup, tsconfig, basics, services-and-layers, data-modeling, error-handling, config, testing, cli.
+
+Never guess at Effect patterns - check the guide first.
+<!-- effect-solutions:end -->

@@ -9,8 +9,11 @@ const user = Schema.decodeUnknownSync(User)({
   url: "https://github.com/Octocat",
   avatarUrl: "https://avatars.githubusercontent.com/u/1",
 })
+
 const sha = "0123456789abcdef0123456789abcdef01234567"
+
 const timestamp = Schema.decodeUnknownSync(IsoTimestamp)("2024-02-29T12:00:00Z")
+
 const commit = {
   user,
   sha: Schema.decodeUnknownSync(CommitSha)(sha),
@@ -49,6 +52,7 @@ describe("activity window", () => {
     const result = ActivityDomain.resolveWindow({}, Date.parse("2024-03-01T23:00:00Z"))
 
     expect(Result.isSuccess(result)).toBe(true)
+
     if (Result.isSuccess(result)) {
       expect(String(result.success.from)).toBe("2024-02-01")
       expect(String(result.success.to)).toBe("2024-03-01")
@@ -75,9 +79,11 @@ describe("activity summary projection", () => {
       from: "2024-02-01",
       to: "2024-03-01",
     })
+
     const result = ActivityDomain.summarize(window, evidence)
 
     expect(Result.isSuccess(result)).toBe(true)
+
     if (Result.isSuccess(result)) {
       expect(result.success.totals).toEqual({
         commits: 1,
@@ -100,6 +106,7 @@ describe("activity summary projection", () => {
       from: "2024-02-01",
       to: "2024-03-01",
     })
+
     const result = ActivityDomain.summarize(window, {
       ...evidence,
       matchedCommits: 125,
@@ -107,6 +114,7 @@ describe("activity summary projection", () => {
     })
 
     expect(Result.isSuccess(result)).toBe(true)
+
     if (Result.isSuccess(result)) {
       expect(result.success.coverage).toEqual({
         complete: false,
@@ -122,16 +130,19 @@ describe("activity summary projection", () => {
       from: "2024-02-01",
       to: "2024-03-01",
     })
+
     const languages = Array.from({ length: 21 }, (_, index) => ({
       name: `Language${String(index).padStart(2, "0")}`,
       bytes: index + 1,
     }))
+
     const result = ActivityDomain.summarize(window, {
       ...evidence,
       repositories: [{ nameWithOwner: "owner/repo", languages }],
     })
 
     expect(Result.isSuccess(result)).toBe(true)
+
     if (Result.isSuccess(result)) {
       expect(result.success.languages).toHaveLength(20)
       expect(result.success.languages[0]?.name).toBe("Language20")
@@ -149,6 +160,7 @@ describe("activity summary projection", () => {
       from: "2024-02-01",
       to: "2024-03-01",
     })
+
     const result = ActivityDomain.summarize(window, {
       user,
       items: [],
@@ -158,6 +170,7 @@ describe("activity summary projection", () => {
     })
 
     expect(Result.isSuccess(result)).toBe(true)
+
     if (Result.isSuccess(result)) {
       expect(result.success.coverage.complete).toBe(true)
       expect(result.success.languages).toEqual([])

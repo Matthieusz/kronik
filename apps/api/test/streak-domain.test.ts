@@ -8,7 +8,9 @@ const user = Schema.decodeUnknownSync(User)({
   url: "https://github.com/Octocat",
   avatarUrl: "https://avatars.githubusercontent.com/u/1",
 })
+
 const start = Schema.decodeUnknownSync(IsoDate)("2024-01-01")
+
 const end = Schema.decodeUnknownSync(IsoDate)("2024-12-30")
 
 const calendar = (counts: Readonly<Record<number, number>> = {}) =>
@@ -18,6 +20,7 @@ const calendar = (counts: Readonly<Record<number, number>> = {}) =>
         .toISOString()
         .slice(0, 10),
     )
+
     return { date, contributionCount: counts[index] ?? 0 }
   })
 
@@ -26,6 +29,7 @@ describe("contribution streak domain", () => {
     const result = StreakDomain.resolveRange(Date.parse("2025-01-01T23:00:00Z"))
 
     expect(Result.isSuccess(result)).toBe(true)
+
     if (Result.isSuccess(result)) {
       expect(String(result.success.from)).toBe("2024-01-03")
       expect(String(result.success.to)).toBe("2025-01-01")
@@ -36,6 +40,7 @@ describe("contribution streak domain", () => {
     const result = StreakDomain.calculate(user, start, end, calendar())
 
     expect(Result.isSuccess(result)).toBe(true)
+
     if (Result.isSuccess(result))
       expect(result.success).toMatchObject({ currentStreak: 0, longestStreak: 0, active: false })
   })
@@ -43,6 +48,7 @@ describe("contribution streak domain", () => {
   test("calculates active, broken, and tied longest streaks", () => {
     const active = StreakDomain.calculate(user, start, end, calendar({ 362: 1, 363: 1, 364: 1 }))
     const broken = StreakDomain.calculate(user, start, end, calendar({ 362: 1, 364: 1 }))
+
     const tied = StreakDomain.calculate(
       user,
       start,
@@ -53,10 +59,13 @@ describe("contribution streak domain", () => {
     expect(Result.isSuccess(active)).toBe(true)
     expect(Result.isSuccess(broken)).toBe(true)
     expect(Result.isSuccess(tied)).toBe(true)
+
     if (Result.isSuccess(active))
       expect(active.success).toMatchObject({ currentStreak: 3, longestStreak: 3, active: true })
+
     if (Result.isSuccess(broken))
       expect(broken.success).toMatchObject({ currentStreak: 1, longestStreak: 1, active: true })
+
     if (Result.isSuccess(tied))
       expect(tied.success).toMatchObject({ currentStreak: 2, longestStreak: 3, active: true })
   })
@@ -65,6 +74,7 @@ describe("contribution streak domain", () => {
     const result = StreakDomain.calculate(user, start, end, calendar({ 362: 1, 363: 1 }))
 
     expect(Result.isSuccess(result)).toBe(true)
+
     if (Result.isSuccess(result))
       expect(result.success).toMatchObject({ currentStreak: 2, longestStreak: 2, active: true })
   })

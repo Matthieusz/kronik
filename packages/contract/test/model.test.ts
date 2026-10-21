@@ -31,6 +31,7 @@ describe("ActivitySummary", () => {
       })),
       otherBytes: 0,
     }
+
     expect(Result.isFailure(Schema.decodeUnknownResult(ActivitySummary)(summary))).toBe(true)
   })
 })

@@ -24,6 +24,7 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
       return yield* Effect.scoped(
         Effect.gen(function* () {
           const client = yield* namespace.getByName(username.toLowerCase())
+
           return yield* client
             .latestCommit({ username })
             .pipe(Effect.catchTag("RpcClientError", () => Effect.fail(coordinatorFailure())))
@@ -34,12 +35,14 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
       return yield* Effect.scoped(
         Effect.gen(function* () {
           const client = yield* namespace.getByName(input.username.toLowerCase())
+
           const payload =
             input.cursor !== undefined
               ? { username: input.username, cursor: input.cursor }
               : input.limit !== undefined
                 ? { username: input.username, limit: input.limit }
                 : { username: input.username }
+
           return yield* client
             .commits(payload)
             .pipe(Effect.catchTag("RpcClientError", () => Effect.fail(coordinatorFailure())))
@@ -50,6 +53,7 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
       return yield* Effect.scoped(
         Effect.gen(function* () {
           const client = yield* namespace.getByName(input.username.toLowerCase())
+
           const payload =
             input.from !== undefined && input.to !== undefined
               ? { username: input.username, from: input.from, to: input.to }
@@ -58,6 +62,7 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
                 : input.to !== undefined
                   ? { username: input.username, to: input.to }
                   : { username: input.username }
+
           return yield* client
             .summary(payload)
             .pipe(Effect.catchTag("RpcClientError", () => Effect.fail(coordinatorFailure())))
@@ -68,6 +73,7 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
       return yield* Effect.scoped(
         Effect.gen(function* () {
           const client = yield* namespace.getByName(username.toLowerCase())
+
           return yield* client
             .streak({ username })
             .pipe(Effect.catchTag("RpcClientError", () => Effect.fail(coordinatorFailure())))
@@ -75,6 +81,7 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
       )
     }),
   })
+
   const service = UserActivity.StreakService.of({
     latestCommit: (username) =>
       cacheAware.latestCommit(username).pipe(Effect.map(({ value }) => value)),
@@ -82,6 +89,7 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
     summarize: (input) => cacheAware.summarize(input).pipe(Effect.map(({ value }) => value)),
     streak: (username) => cacheAware.streak(username).pipe(Effect.map(({ value }) => value)),
   })
+
   return Layer.succeedContext(
     Context.empty().pipe(
       Context.add(UserActivity.CacheAwareService, cacheAware),
@@ -95,6 +103,7 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
 export const activityRpcLayer = Layer.unwrap(
   Effect.gen(function* () {
     const namespace = yield* ActivityObject
+
     return layerWithNamespace(namespace)
   }),
 )

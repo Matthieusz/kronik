@@ -12,9 +12,11 @@ describe("contribution streak contract", () => {
 
   test("requires a 365-day range and derives active from current streak", () => {
     const procedure = StreakRpcs.requests.get("streak")
+
     if (procedure === undefined) throw new Error("streak RPC is not declared")
 
     const payload = Schema.decodeUnknownResult(procedure.payloadSchema)({ username: "OctoCat" })
+
     const valid = Schema.decodeUnknownResult(ContributionStreak)({
       user: {
         login: "OctoCat",
@@ -27,6 +29,7 @@ describe("contribution streak contract", () => {
       longestStreak: 0,
       active: false,
     })
+
     const invalidRange = Schema.decodeUnknownResult(ContributionStreak)({
       user: {
         login: "OctoCat",
@@ -39,6 +42,7 @@ describe("contribution streak contract", () => {
       longestStreak: 1,
       active: true,
     })
+
     const invalidActive = Schema.decodeUnknownResult(ContributionStreak)({
       user: {
         login: "OctoCat",

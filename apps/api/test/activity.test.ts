@@ -23,11 +23,13 @@ const summary = Schema.decodeUnknownSync(ActivitySummary)({
 describe("activity summary public route", () => {
   test("passes inclusive bounds through the schema-aware RPC client", async () => {
     const inputs: Array<unknown> = []
+
     const service: UserActivity.SummaryInterface = {
       latestCommit: () => Effect.die("not used"),
       commits: () => Effect.die("not used"),
       summarize: (input) => {
         inputs.push(input)
+
         return Effect.succeed(summary)
       },
     }
@@ -36,9 +38,11 @@ describe("activity summary public route", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const activity = yield* UserActivity.SummaryService
+
           const web = yield* makeWebHandler(new URL("https://docs.example.test"), {
             summaryService: activity,
           })
+
           const response = yield* Effect.promise(() =>
             web.handler(
               new Request(
@@ -46,6 +50,7 @@ describe("activity summary public route", () => {
               ),
             ),
           )
+
           return {
             status: response.status,
             body: yield* Effect.promise(() => response.json()),

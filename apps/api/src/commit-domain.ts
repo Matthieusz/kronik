@@ -4,6 +4,7 @@ import type { CommitSummary, LatestCommit, User } from "@kronik/contract/model"
 import { Result } from "effect"
 
 const MaxUtf8Bytes = 8192
+
 const TruncationMarker = "…"
 
 type CommitEvidence = {
@@ -30,33 +31,38 @@ const utf8Length = (value: string): number => new TextEncoder().encode(value).le
 const takePrefix = (characters: ReadonlyArray<string>, budget: number): string => {
   let bytes = 0
   let result = ""
+
   for (const character of characters) {
     const characterBytes = utf8Length(character)
+
     if (bytes + characterBytes > budget) return result
     result += character
     bytes += characterBytes
   }
+
   return result
 }
 
 const takeSuffix = (characters: ReadonlyArray<string>, budget: number): string => {
   let bytes = 0
   let result = ""
+
   for (let index = characters.length - 1; index >= 0; index -= 1) {
     const character = characters[index]
+
     if (character === undefined) return result
     const characterBytes = utf8Length(character)
+
     if (bytes + characterBytes > budget) return result
     result = character + result
     bytes += characterBytes
   }
+
   return result
 }
 
 /** Bound a message without splitting a Unicode code point or losing its edges. */
-export const truncateUtf8 = (
-  value: string,
-): { readonly value: string; readonly truncated: boolean } => {
+export const truncateUtf8 = (value: string) => {
   if (utf8Length(value) <= MaxUtf8Bytes) return { value, truncated: false }
 
   const characters = Array.from(value)
@@ -70,6 +76,7 @@ export const truncateUtf8 = (
     prefix = Array.from(prefix).slice(0, -1).join("")
     result = `${prefix}${TruncationMarker}${suffix}`
   }
+
   while (utf8Length(result) > MaxUtf8Bytes && suffix.length > 0) {
     suffix = Array.from(suffix).slice(1).join("")
     result = `${prefix}${TruncationMarker}${suffix}`
@@ -80,6 +87,7 @@ export const truncateUtf8 = (
 
 const splitMessage = (message: string): { readonly headline: string; readonly body: string } => {
   const newline = message.indexOf("\n")
+
   return newline < 0
     ? { headline: message, body: "" }
     : { headline: message.slice(0, newline), body: message.slice(newline + 1).replace(/^\n/, "") }
@@ -92,7 +100,9 @@ const safeChangedLines = (
   if (!Number.isSafeInteger(additions) || !Number.isSafeInteger(deletions)) {
     return Result.fail("unsafe-change-count")
   }
+
   const changedLines = additions + deletions
+
   return Number.isSafeInteger(changedLines)
     ? Result.succeed(changedLines)
     : Result.fail("unsafe-change-count")
@@ -103,6 +113,7 @@ export const projectCommit = (
   evidence: Evidence,
 ): Result.Result<CommitSummary, ProjectionError> => {
   const changedLines = safeChangedLines(evidence.additions, evidence.deletions)
+
   if (Result.isFailure(changedLines)) return Result.fail(changedLines.failure)
 
   const message = splitMessage(evidence.message)
@@ -128,6 +139,7 @@ export const projectCommit = (
 /** Project one decoded GitHub commit into the latest-commit response. */
 export const projectLatest = (evidence: Evidence): Result.Result<LatestCommit, ProjectionError> => {
   const commit = projectCommit(evidence)
+
   return Result.isFailure(commit)
     ? Result.fail(commit.failure)
     : Result.succeed({ user: evidence.user, commit: commit.success })

@@ -18,6 +18,7 @@ import {
 } from "./model.js"
 
 const UserPath = Schema.Struct({ username: GitHubUsername })
+
 const CommitLimit = Schema.NumberFromString.pipe(
   Schema.check(Schema.isInt()),
   Schema.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
@@ -64,6 +65,7 @@ export const CommitQuery = CommitQueryInput.pipe(
     ),
   ),
 ).annotate({ identifier: "CommitQuery" })
+
 /** Optional inclusive Activity Window bounds. Both bounds are required together. */
 export const ActivityQuery = Schema.Struct({
   from: Schema.optionalKey(IsoDate),

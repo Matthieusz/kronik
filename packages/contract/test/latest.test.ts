@@ -23,25 +23,30 @@ describe("latest commit contract", () => {
   test("declares the paginated commit route and rejects mixed RPC modes", () => {
     expect(CommitsEndpoint.path).toBe("/v1/users/:username/commits")
     const procedure = CommitRpcs.requests.get("commits")
+
     if (procedure === undefined) throw new Error("commits RPC is not declared")
 
     const initial = Schema.decodeUnknownResult(procedure.payloadSchema)({
       username: "OctoCat",
       limit: 25,
     })
+
     const continuation = Schema.decodeUnknownResult(procedure.payloadSchema)({
       username: "OctoCat",
       cursor: "opaque-cursor",
     })
+
     const mixed = Schema.decodeUnknownResult(procedure.payloadSchema)({
       username: "OctoCat",
       limit: 25,
       cursor: "opaque-cursor",
     })
+
     const invalidQuery = Schema.decodeUnknownResult(CommitQuery)({
       limit: "25",
       cursor: "opaque-cursor",
     })
+
     expect(Result.isSuccess(initial)).toBe(true)
     expect(Result.isSuccess(continuation)).toBe(true)
     expect(Result.isFailure(mixed)).toBe(true)
@@ -50,6 +55,7 @@ describe("latest commit contract", () => {
 
   test("decodes the latest RPC payload at runtime", () => {
     const procedure = LatestCommitRpcs.requests.get("latestCommit")
+
     if (procedure === undefined) throw new Error("latestCommit RPC is not declared")
 
     const valid = Schema.decodeUnknownResult(procedure.payloadSchema)(latest)

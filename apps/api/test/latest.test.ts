@@ -39,14 +39,17 @@ describe("latest commit public route", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const latestService = yield* UserActivity.LatestService
+
           const web = yield* makeWebHandler(new URL("https://docs.example.test"), {
             latestService,
           })
+
           const response = yield* Effect.promise(() =>
             web.handler(
               new Request("https://api.example.test/v1/users/canonicaluser/commits/latest"),
             ),
           )
+
           return {
             status: response.status,
             body: yield* Effect.promise(() => response.json()),

@@ -2,7 +2,7 @@
 /* oxlint-disable effecttsgo/unstable-api-usage */
 
 import { RateLimit, RateLimitBinding, type RateLimitClient, Worker } from "alchemy/Cloudflare"
-import { Duration, Effect, Layer, Option } from "effect"
+import { Duration, Effect, Layer, Option, Schema } from "effect"
 import { Clock } from "effect"
 import type { ConfigError } from "effect/Config"
 import { layer } from "effect/http/FetchHttpClient"
@@ -11,6 +11,8 @@ import { activityRpcLayer } from "./activity-rpc.js"
 import { Configuration, configurationLayer } from "./config.js"
 import { Cursor } from "./cursor.js"
 import { GitHub } from "./github.js"
+// These functions build and run HTTP adapters, not contextual services.
+// oxlint-disable-next-line anti-slop-effect/no-service-constructor-imports
 import { cloudflareEdgeCache, makeHttpEffect, makePublicResponse } from "./http.js"
 import { Observability } from "./observability.js"
 import { fromWeb } from "effect/http/HttpServerResponse"
@@ -20,8 +22,7 @@ import { UserActivity } from "./user-activity.js"
 /* SAFETY: the Cloudflare generated RateLimit client exposes unknown channels; this adapter catches all failures and parses its result. */
 /* oxlint-disable effecttsgo/any-unknown-in-error-context */
 
-const isRateLimitSuccess = (value: unknown): boolean =>
-  typeof value === "object" && value !== null && Reflect.get(value, "success") === true
+const RateLimitSuccess = Schema.Struct({ success: Schema.Literal(true) })
 
 const runtimeClock: Clock.Clock = {
   currentTimeMillisUnsafe: () => Date.now(),
@@ -57,6 +58,7 @@ export const makeWorkerResponse = (
 export const makeWorkerHttpEffect = Effect.fn("KronikApi.makeWorkerHttpEffect")(function* () {
   const configuration = yield* Configuration
   const activityCache = yield* UserActivity.CacheAwareService
+
   return yield* makeHttpEffect(configuration.docsUrl, {
     activityCacheService: activityCache,
   })
@@ -67,9 +69,11 @@ export const makeKronikWorkerInitializer = (
   configurationRuntime: Layer.Layer<Configuration, ConfigError>,
 ) => {
   const githubRuntime = GitHub.layer.pipe(Layer.provide(layer), Layer.provide(configurationRuntime))
+
   const cursorRuntime = Layer.unwrap(
     Effect.gen(function* () {
       const configuration = yield* Configuration
+
       return Option.match(configuration.cursorSecret, {
         onNone: () =>
           Layer.effectDiscard(
@@ -79,9 +83,11 @@ export const makeKronikWorkerInitializer = (
       })
     }),
   ).pipe(Layer.provide(configurationRuntime))
+
   const activityObjectRuntime = ActivityObjectLive.pipe(
     Layer.provide(Layer.mergeAll(githubRuntime, cursorRuntime, runtimeClockLayer)),
   )
+
   const applicationRuntime = activityRpcLayer.pipe(Layer.provide(activityObjectRuntime))
 
   return Effect.gen(function* () {
@@ -89,20 +95,25 @@ export const makeKronikWorkerInitializer = (
       namespaceId: "kronik-public-v1",
       simple: { limit: 60, period: 60 },
     })
+
     const fetch = yield* makeWorkerHttpEffect()
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest
         const ip = request.headers["cf-connecting-ip"] ?? "unknown"
+
         const decision = yield* Effect.catchCause(
-          rateLimit.limit({ key: ip }).pipe(Effect.map(isRateLimitSuccess)),
+          rateLimit.limit({ key: ip }).pipe(Effect.map(Schema.is(RateLimitSuccess))),
           () => Effect.succeed(true),
         )
+
         const webRequest = yield* toWeb(request)
+
         const webResponse = yield* Effect.promise(() =>
           makeWorkerResponse(webRequest, fetch, decision),
         )
+
         return fromWeb(webResponse)
       }),
     }

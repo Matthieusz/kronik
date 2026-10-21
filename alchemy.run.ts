@@ -9,6 +9,7 @@ export default Stack(
   { providers: providers(), state: state() },
   Effect.gen(function* () {
     const api = yield* KronikApi
+
     const docs = yield* Website.StaticSite("KronikDocs", {
       command: "bun run build",
       cwd: "apps/docs",

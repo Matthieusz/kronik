@@ -31,12 +31,14 @@ const latest = Schema.decodeUnknownSync(LatestCommit)({
     parents: [],
   },
 })
+
 const page = Schema.decodeUnknownSync(CommitPage)({
   user: latest.user,
   items: [],
   previous: null,
   next: null,
 })
+
 const summary = Schema.decodeUnknownSync(ActivitySummary)({
   user: latest.user,
   window: { from: "2026-01-01", to: "2026-01-30" },
@@ -45,6 +47,7 @@ const summary = Schema.decodeUnknownSync(ActivitySummary)({
   languages: [],
   otherBytes: 0,
 })
+
 const streak = Schema.decodeUnknownSync(ContributionStreak)({
   user: latest.user,
   from: "2025-01-02",
@@ -63,7 +66,9 @@ describe("public edge policy", () => {
         }),
       ),
     )
+
     const events: Array<Observability.Event> = []
+
     const response = await makeWorkerResponse(
       new Request("https://api.example.test/health"),
       httpEffect,
@@ -85,9 +90,11 @@ describe("public edge policy", () => {
         }),
       ),
     )
+
     const options = await web.handler(
       new Request("https://api.example.test/health", { method: "OPTIONS" }),
     )
+
     const head = await web.handler(
       new Request("https://api.example.test/health", {
         method: "HEAD",
@@ -106,6 +113,7 @@ describe("public edge policy", () => {
 
   test("releases request-scoped activity resources when the response completes", async () => {
     let releases = 0
+
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
@@ -137,18 +145,21 @@ describe("public edge policy", () => {
 
   test("interrupts an already-cancelled request before cold work starts", async () => {
     let calls = 0
+
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
           latestService: {
             latestCommit: () => {
               calls += 1
+
               return Effect.succeed(latest)
             },
           },
         }),
       ),
     )
+
     const controller = new AbortController()
     controller.abort()
 
@@ -162,6 +173,7 @@ describe("public edge policy", () => {
         () => false,
         () => true,
       )
+
     expect(cancelled).toBe(true)
     expect(calls).toBe(0)
     await web.dispose()
@@ -169,6 +181,7 @@ describe("public edge policy", () => {
 
   test("emits only bounded safe request telemetry", async () => {
     const events: Array<Observability.Event> = []
+
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
@@ -182,6 +195,7 @@ describe("public edge policy", () => {
         }),
       ),
     )
+
     const response = await web.handler(
       new Request(
         "https://api.example.test/v1/users/MixedUser/commits/latest?cursor=secret-cursor",
@@ -217,13 +231,16 @@ describe("public edge policy", () => {
   test("rate limits every request and fails open on binding failure", async () => {
     let calls = 0
     const events: Array<Observability.Event> = []
+
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
           rateLimiter: {
             check: async () => {
               calls += 1
+
               if (calls === 3) throw new Error("binding unavailable")
+
               return calls !== 1
             },
           },
@@ -236,6 +253,7 @@ describe("public edge policy", () => {
         }),
       ),
     )
+
     const denied = await web.handler(new Request("https://api.example.test/health"))
     const allowed = await web.handler(new Request("https://api.example.test/health"))
     const failOpen = await web.handler(new Request("https://api.example.test/health"))
@@ -255,6 +273,7 @@ describe("public edge policy", () => {
 
   test("uses the declared edge TTL for every activity capability", async () => {
     let now = 0
+
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
@@ -284,9 +303,11 @@ describe("public edge policy", () => {
     ])
     expect(responses.every((response) => response.headers.get("age") === "0")).toBe(true)
     now = 301_000
+
     const stale = await web.handler(
       new Request("https://api.example.test/v1/users/MixedUser/activity"),
     )
+
     expect(stale.headers.get("x-kronik-cache")).toBe("stale")
     expect(stale.headers.get("age")).toBe("301")
     await web.dispose()
@@ -296,12 +317,14 @@ describe("public edge policy", () => {
     let calls = 0
     let now = 0
     const events: Array<Observability.Event> = []
+
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
           latestService: {
             latestCommit: () => {
               calls += 1
+
               return Effect.succeed(latest)
             },
           },
@@ -315,12 +338,15 @@ describe("public edge policy", () => {
         }),
       ),
     )
+
     const first = await web.handler(
       new Request("https://api.example.test/v1/users/MixedUser/commits/latest"),
     )
+
     const second = await web.handler(
       new Request("https://api.example.test/v1/users/mixeduser/commits/latest"),
     )
+
     const notModified = await web.handler(
       new Request("https://api.example.test/v1/users/MIXEDUSER/commits/latest", {
         headers: { "if-none-match": first.headers.get("etag") ?? "" },
@@ -328,6 +354,7 @@ describe("public edge policy", () => {
     )
 
     now = 61_000
+
     const stale = await web.handler(
       new Request("https://api.example.test/v1/users/mixeduser/commits/latest"),
     )
