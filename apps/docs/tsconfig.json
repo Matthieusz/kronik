@@ -14,7 +14,9 @@
     "app/**/*.ts",
     "app/**/*.tsx",
     "lib/**/*.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    "worker.ts"
   ],
   "exclude": ["node_modules"]
 }

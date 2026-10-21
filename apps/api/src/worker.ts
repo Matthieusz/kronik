@@ -92,7 +92,7 @@ export const makeKronikWorkerInitializer = (
 
   return Effect.gen(function* () {
     const rateLimit: RateLimitClient = yield* RateLimit("KRONIK_PUBLIC_RATE_LIMIT", {
-      namespaceId: "kronik-public-v1",
+      namespaceId: 1001,
       simple: { limit: 60, period: 60 },
     })
 
