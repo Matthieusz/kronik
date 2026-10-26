@@ -11,7 +11,7 @@
     "./rpc": "./src/rpc.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsrs --noEmit",
     "test": "bun test",
     "openapi:generate": "bun script/generate-openapi.ts",
     "openapi:check": "bun script/generate-openapi.ts --check"
@@ -20,8 +20,8 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/tsgo": "0.56.0",
+    "@effect/tsgo": "0.59.0",
     "@types/bun": "1.4.3",
-    "typescript": "catalog:"
+    "tsrs": "catalog:"
   }
 }

@@ -8,7 +8,7 @@
     "generate": "bun run scripts/prepare-reference.ts",
     "build": "bun run generate && blume build",
     "preview": "blume preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsrs --noEmit",
     "validate": "bun run generate && blume validate --strict",
     "test": "bun test"
   },
@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@types/bun": "1.4.3",
-    "typescript": "catalog:"
+    "tsrs": "catalog:"
   },
   "engines": {
     "node": ">=22.19.0"

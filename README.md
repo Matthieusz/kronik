@@ -33,6 +33,8 @@ bun dev
 ```
 
 Run the full verification suite with `bun run verify`.
+Workspace typechecks use [tsrs](https://github.com/oxc-project/tsrs), patched by
+[`@effect/tsgo`](https://github.com/Effect-TS/tsgo) alongside Oxlint during `bun install`.
 
 ### Production deployment
 

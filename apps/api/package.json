@@ -9,7 +9,7 @@
     "destroy": "alchemy destroy",
     "logs": "alchemy logs",
     "tail": "alchemy tail",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsrs --noEmit",
     "test": "bun test",
     "test:integration": "bun test test/runtime.test.ts"
   },
@@ -20,6 +20,6 @@
   },
   "devDependencies": {
     "@types/bun": "1.4.3",
-    "typescript": "catalog:"
+    "tsrs": "catalog:"
   }
 }
