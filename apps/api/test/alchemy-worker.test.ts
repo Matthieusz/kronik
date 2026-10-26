@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { providers } from "alchemy/Cloudflare"
+import { providers } from "@alchemy.run/cloudflare"
 import { make } from "alchemy/Test/Bun"
 import { Effect } from "effect"
 import KronikRuntimeVerification from "./alchemy-runtime.fixture.js"

@@ -1,5 +1,5 @@
 import { localState, Stack } from "alchemy"
-import { providers } from "alchemy/Cloudflare"
+import { providers } from "@alchemy.run/cloudflare"
 import { Effect } from "effect"
 import { KronikApi } from "../src/worker.js"
 import KronikApiLive from "./alchemy-runtime.worker.js"

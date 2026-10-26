@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@effect/tsgo": "0.59.0",
-    "@types/bun": "1.4.3",
+    "@types/bun": "1.4.4",
     "tsrs": "catalog:"
   }
 }

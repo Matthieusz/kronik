@@ -14,12 +14,13 @@
     "test:integration": "bun test test/runtime.test.ts"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "catalog:",
     "@kronik/contract": "workspace:*",
     "alchemy": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "1.4.3",
+    "@types/bun": "1.4.4",
     "tsrs": "catalog:"
   }
 }

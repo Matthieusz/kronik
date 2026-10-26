@@ -16,7 +16,7 @@ import {
   User,
 } from "@kronik/contract/model"
 import { StreakRpcs } from "@kronik/contract/rpc"
-import { DurableObjectState, RpcDurableObject } from "alchemy/Cloudflare"
+import { DurableObjectState, RpcDurableObject } from "@alchemy.run/cloudflare"
 import { RuntimeContext } from "alchemy/RuntimeContext"
 import {
   Cache,

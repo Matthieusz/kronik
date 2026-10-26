@@ -1,7 +1,7 @@
 // Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
 /* oxlint-disable effecttsgo/unstable-api-usage */
 
-import { RateLimit, RateLimitBinding, type RateLimitClient, Worker } from "alchemy/Cloudflare"
+import { RateLimit, RateLimitBinding, type RateLimitClient, Worker } from "@alchemy.run/cloudflare"
 import { Duration, Effect, Layer, Option, Schema } from "effect"
 import { Clock } from "effect"
 import type { ConfigError } from "effect/Config"

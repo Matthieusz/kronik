@@ -1,5 +1,5 @@
 import { Stack, Stage } from "alchemy"
-import { providers, state, Website } from "alchemy/Cloudflare"
+import { providers, state, Website } from "@alchemy.run/cloudflare"
 import { Effect } from "effect"
 import KronikApiLive, { KronikApi } from "./apps/api/src/worker.js"
 
