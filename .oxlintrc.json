@@ -44,7 +44,6 @@
     "anti-slop-effect/prefer-effect-match": "error"
   },
   "ignorePatterns": [
-    "apps/docs",
     "packages/contract/openapi.json",
     ".agent/**",
     ".agents/**",

@@ -21,6 +21,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Install Node.js for Blume
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -57,8 +62,10 @@ jobs:
         working-directory: apps/api
         run: bun run test:integration
 
-      - name: Build Fumadocs static site
+      - name: Verify Blume static site
         working-directory: apps/docs
         run: |
           bun run typecheck
+          bun test
           bun run build
+          bun run validate

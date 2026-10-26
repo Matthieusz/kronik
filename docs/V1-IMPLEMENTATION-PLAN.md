@@ -42,7 +42,7 @@ These v1 decisions are fixed unless the user explicitly changes them:
 - Activity aggregation includes at most 100 commits and reports partial coverage explicitly.
 - Longest Contribution Streak is bounded to the evaluated trailing 365-day GitHub calendar.
 - Runtime stack: Bun, TypeScript 7, Effect v4, Alchemy, and Cloudflare Workers.
-- Docs stack: Fumadocs generated from the authoritative OpenAPI document.
+- Docs stack: Blume generated from the authoritative OpenAPI document.
 - No accounts, caller API keys, webhooks, scheduled refreshes, badges, GraphQL endpoint, generated SDK, custom analytics, D1, KV, or paid observability sink belong in v1.
 - No deployment, destruction, custom-domain adoption, secret creation, or Cloudflare mutation occurs without explicit user confirmation.
 
@@ -90,7 +90,7 @@ The contract compiles, but each later slice must sharpen the schemas it exercise
 
 ## Slice 1 — Running health/docs walking skeleton
 
-**Outcome:** A local Cloudflare Worker answers `/health`, serves `/openapi.json`, redirects `/docs`, and has a separately buildable minimal Fumadocs site. No GitHub call exists yet.
+**Outcome:** A local Cloudflare Worker answers `/health`, serves `/openapi.json`, redirects `/docs`, and has a separately buildable minimal Blume site. No GitHub call exists yet.
 
 ### Contract
 
@@ -111,7 +111,7 @@ The contract compiles, but each later slice must sharpen the schemas it exercise
 
 ### Docs application
 
-- Create `apps/docs` as a minimal Kronik Fumadocs app.
+- Create `apps/docs` as a minimal Kronik Blume app.
 - Consume `packages/contract/openapi.json`; never duplicate endpoint schemas.
 - Generate/build a minimal landing page and API-reference shell.
 - Prefer static output compatible with Alchemy's Cloudflare static-site Worker path.
@@ -127,7 +127,7 @@ The contract compiles, but each later slice must sharpen the schemas it exercise
 
 - Test the real health handler, OpenAPI response, and docs redirect.
 - Prove health remains independent of missing GitHub credentials.
-- Build Fumadocs and verify it reads generated OpenAPI.
+- Build Blume and verify it reads generated OpenAPI.
 
 Run:
 
@@ -190,7 +190,7 @@ This slice establishes the reusable vertical path. Later slices extend it rather
 
 - Add only the latest-commit handler to the runtime activity composition used by slice tests.
 - Handler decodes, delegates, and projects typed errors; it contains no GitHub/domain logic.
-- Add Fumadocs conceptual text for commit scope, primary-author attribution, actual parents, message truncation, and latest/no-commit semantics.
+- Add Blume conceptual text for commit scope, primary-author attribution, actual parents, message truncation, and latest/no-commit semantics.
 
 ### Acceptance
 
@@ -393,13 +393,13 @@ Add a non-deploying workflow for:
 - package-local typechecks/tests;
 - OpenAPI regeneration/freshness;
 - local Cloudflare integration tests;
-- Fumadocs static build.
+- Blume static build and strict link validation.
 
 CI must not deploy or require application secrets.
 
 ### Documentation completion
 
-Fumadocs must generate endpoint reference from OpenAPI and include concise conceptual pages for:
+Blume must generate endpoint reference from OpenAPI and include concise conceptual pages for:
 
 - public default-branch and primary-author scope;
 - actual parent references and message truncation;
@@ -443,6 +443,6 @@ v1 is incomplete until evidence demonstrates all of the following:
 - Rate limiting is approximate per-location/per-IP abuse protection and fails open on limiter failure.
 - Expected HTTP failures are safe stable problem details with request-scoped instances.
 - ETag, CORS, cache, stale, rate-limit, and request-ID headers are consistent.
-- OpenAPI comes only from `packages/contract`; Fumadocs consumes it without schema duplication.
+- OpenAPI comes only from `packages/contract`; Blume consumes it without schema duplication.
 - Default tests depend on neither live GitHub nor real time.
 - No deployment or Cloudflare mutation occurs without explicit confirmation.

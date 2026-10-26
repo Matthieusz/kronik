@@ -34,6 +34,25 @@ bun dev
 
 Run the full verification suite with `bun run verify`.
 
+### Documentation
+
+The [Blume](https://useblume.dev/) site in `apps/docs` requires Node.js 22.19 or newer.
+Its Markdown/MDX content lives in `apps/docs/content`; API reference pages are generated
+directly from `packages/contract/openapi.json`.
+
+```bash
+cd apps/docs
+bun run dev
+bun run build
+bun run validate
+```
+
+Static output is written to `apps/docs/dist`. Alchemy serves it through the existing
+Worker gateway, forwarding `/api/*` to the API. `API_URL` sets the build-time playground
+server (Alchemy supplies it; standalone builds default to `https://kronik.informati.dev/api`).
+The unmodified Kronik contract remains available at `/openapi.json`; Blume's separate
+JSON docs API is disabled to avoid colliding with these routes.
+
 ## License
 
 [MIT](LICENSE)

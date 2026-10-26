@@ -18,9 +18,9 @@ export default Stack(
       domain: stage === "prod" ? "kronik.informati.dev" : null,
       env: {
         API: api,
-        NEXT_PUBLIC_API_URL: stage === "prod" ? "https://kronik.informati.dev/api" : api.url,
+        API_URL: stage === "prod" ? "https://kronik.informati.dev/api" : api.url,
       },
-      outdir: "out",
+      outdir: "dist",
       assets: { htmlHandling: "drop-trailing-slash", runWorkerFirst: ["/api", "/api/*"] },
     })
 

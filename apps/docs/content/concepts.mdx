@@ -1,0 +1,66 @@
+---
+title: How Kronik interprets GitHub activity
+description: The rules behind attribution, pagination, coverage, delivery, and the data returned by Kronik v1.
+sidebar:
+  label: Concepts
+---
+
+## Commit scope and attribution [#commit-scope]
+
+Kronik searches public default branches across repositories owned by anyone. A commit is
+included only when GitHub resolves the requested user as its primary author. A co-author,
+merger, or commit appearance alone does not qualify.
+
+Responses use the canonical GitHub login. Parent values are the actual commit graph
+references, not inferred links. Messages contain a headline and body; bodies over 8 KiB
+are bounded at both edges without splitting Unicode and are marked `bodyTruncated`.
+
+## Pagination
+
+The first commit-feed request chooses a page size from 1 through 100, defaulting to 10.
+Continuations use only an opaque, authenticated cursor. A cursor is bound to its user and
+direction, preserves the initial snapshot, and expires after one hour. GitHub's
+searchable 1,000-result boundary is not presented as an unlimited feed.
+
+## Activity windows and coverage [#activity-windows]
+
+Activity windows are inclusive UTC dates. The default is today plus the previous 29 dates;
+an explicit window may contain at most 90 dates. Summaries aggregate at most 100 matching
+commits and expose matched versus aggregated counts. When GitHub reports more matches or
+an incomplete search, coverage is partial and `complete` is false.
+
+Repository Language Breakdown uses exact GitHub language bytes for unique repositories
+containing matching commits. It does not describe code personally authored by the user or
+language proficiency. The top 20 entries are retained and omitted bytes remain in
+`otherBytes`.
+
+## Contribution streaks
+
+Streaks use GitHub's contribution calendar over the represented trailing 365-day UTC
+range. An empty cell for today is ignored once, so yesterday's contribution can remain
+current; an earlier empty date ends the current streak. The longest streak is bounded to
+this range and is not an all-time record.
+
+## Delivery and errors
+
+Successful activity responses are edge-cacheable with route-specific freshness: 60 seconds
+for commits and five minutes for summaries and streaks. Responses identify `hit`,
+`miss`, or `stale` cache state, include an age and ETag, and support
+conditional requests with `304 Not Modified`. Eligible stale successes carry
+`Warning: 110 - "Response is stale"`.
+
+Anonymous callers are protected by approximate per-location, per-IP rate limiting. A
+denied request returns `429` and `Retry-After`; limiter failures fail
+open. Public failures use stable `application/problem+json` details and a
+request-scoped instance. Internal tags, provider bodies, credentials, cursors, and raw IP
+addresses are not exposed.
+
+## GitHub credentials
+
+Kronik owns one least-privilege GitHub service credential. Callers never submit personal
+access tokens. GitHub attribution and the bounded cache, aggregation, and public rate
+policy determine what Kronik can report; the API does not claim all branches, all-time
+streaks, complete totals for partial coverage, personal language proficiency, or Katib wire
+compatibility.
+
+[Browse the generated API reference](/api-reference).

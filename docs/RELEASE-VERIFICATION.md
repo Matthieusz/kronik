@@ -13,7 +13,7 @@ secrets and performs these checks:
 - API typecheck and default tests;
 - the initialized local Alchemy Worker and its real Rate Limit and Durable Object bindings;
 - the validated RPC → Durable Object → fake GitHub integration scenarios;
-- Fumadocs typecheck and static build.
+- Blume typecheck, gateway tests, static build, and strict link validation.
 
 The local commands are equivalent to:
 
@@ -29,7 +29,8 @@ need GitHub credentials or real time.
 ## Release audit checklist
 
 - [x] OpenAPI is generated only by `packages/contract` and is checked for freshness.
-- [x] The docs build regenerates its Fumadocs operation pages from that OpenAPI document.
+- [x] Blume generates operation pages directly from that OpenAPI document; a build-time
+      overlay supplies the API server URL without changing the contract.
 - [x] Conceptual docs describe default-branch/primary-author scope, actual parents, bounded
       messages, snapshot cursors and expiry, Activity Window coverage, language-byte semantics,
       trailing-range streaks, cache policy, stale warnings, rate limits, ETags, errors, and the

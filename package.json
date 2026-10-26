@@ -27,7 +27,7 @@
     "lint": "oxlint .",
     "typecheck": "bun run --filter '*' typecheck",
     "test:integration": "bun run --cwd apps/api test:integration",
-    "verify": "bun run format:check && bun run lint && bun run --cwd packages/contract typecheck && bun run --cwd packages/contract test && bun run --cwd packages/contract openapi:check && bun run --cwd apps/api typecheck && bun run --cwd apps/api test && bun run --cwd apps/api test:integration && bun run --cwd apps/docs typecheck && bun run --cwd apps/docs build",
+    "verify": "bun run format:check && bun run lint && bun run --cwd packages/contract typecheck && bun run --cwd packages/contract test && bun run --cwd packages/contract openapi:check && bun run --cwd apps/api typecheck && bun run --cwd apps/api test && bun run --cwd apps/api test:integration && bun run --cwd apps/docs typecheck && bun run --cwd apps/docs test && bun run --cwd apps/docs build && bun run --cwd apps/docs validate",
     "check": "bun run verify",
     "postinstall": "effect-tsgo patch --typescript --oxlint"
   },

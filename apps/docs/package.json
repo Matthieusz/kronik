@@ -4,24 +4,23 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "generate": "bun run scripts/generate-api-reference.ts",
-    "build": "bun run generate && next build",
-    "typecheck": "next typegen && tsc --noEmit"
+    "dev": "bun run generate && blume dev",
+    "generate": "bun run scripts/prepare-reference.ts",
+    "build": "bun run generate && blume build",
+    "preview": "blume preview",
+    "typecheck": "tsc --noEmit",
+    "validate": "bun run generate && blume validate --strict",
+    "test": "bun test"
   },
   "dependencies": {
-    "fumadocs-core": "16.17.7",
-    "fumadocs-openapi": "12.5.4",
-    "fumadocs-ui": "16.17.7",
-    "next": "16.4.2",
-    "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "blume": "2.2.6",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "1.4.3",
-    "@types/node": "26.6.5",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
     "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

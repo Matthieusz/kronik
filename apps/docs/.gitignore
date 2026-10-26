@@ -1,3 +1,4 @@
-.next/
-out/
+.blume/
+dist/
+.generated/
 public/openapi.json

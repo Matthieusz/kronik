@@ -2,7 +2,7 @@
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "semi": false,
   "ignorePatterns": [
-    "apps/docs",
+    "apps/docs/content/**/*.mdx",
     "packages/contract/openapi.json",
     ".agent/**",
     ".agents/**",

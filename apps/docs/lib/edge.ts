@@ -14,9 +14,6 @@ export interface GatewayBindings {
 export const gatewayResponse = (request: Request, bindings: GatewayBindings): Promise<Response> => {
   const url = new URL(request.url)
 
-  // Fumadocs' generated search index is a documentation asset, not an API endpoint.
-  if (url.pathname === "/api/search") return bindings.ASSETS.fetch(request)
-
   if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
     url.pathname = url.pathname.slice(4) || "/"
 

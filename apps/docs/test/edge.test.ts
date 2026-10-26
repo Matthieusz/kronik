@@ -6,6 +6,7 @@ const gateway = () => {
   const apiRequests: Request[] = []
   const assetRequests: Request[] = []
   const apiResponse = new Response("api", { status: 201, headers: { "x-request-id": "test" } })
+
   const bindings: GatewayBindings = {
     API: {
       fetch: async (request) => {
@@ -29,11 +30,16 @@ const gateway = () => {
 describe("documentation gateway", () => {
   test("strips only the API prefix and preserves the request and response", async () => {
     const { bindings, apiRequests, assetRequests, apiResponse } = gateway()
-    const request = new Request("https://kronik.informati.dev/api/v1/users/octocat/commits?limit=1", {
-      method: "POST",
-      headers: { "x-request-id": "test", "cf-connecting-ip": "192.0.2.1" },
-      body: "payload",
-    })
+
+    const request = new Request(
+      "https://kronik.informati.dev/api/v1/users/octocat/commits?limit=1",
+      {
+        method: "POST",
+        headers: { "x-request-id": "test", "cf-connecting-ip": "192.0.2.1" },
+        body: "payload",
+      },
+    )
+
     const response = await gatewayResponse(request, bindings)
     const forwarded = apiRequests[0]
 
@@ -48,7 +54,13 @@ describe("documentation gateway", () => {
   })
 
   test("forwards operational API routes and the prefix root", async () => {
-    for (const [path, target] of [["/api/health", "/health"], ["/api/openapi.json", "/openapi.json"], ["/api", "/"], ["/api/", "/"]]) {
+    for (const [path, target] of [
+      ["/api/health", "/health"],
+      ["/api/openapi.json", "/openapi.json"],
+      ["/api/search", "/search"],
+      ["/api", "/"],
+      ["/api/", "/"],
+    ]) {
       const { bindings, apiRequests } = gateway()
       await gatewayResponse(new Request(`https://kronik.informati.dev${path}`), bindings)
 
@@ -57,7 +69,16 @@ describe("documentation gateway", () => {
   })
 
   test("serves docs and similarly named paths without forwarding to the API", async () => {
-    for (const path of ["/", "/api-reference", "/api/search", "/openapi.json", "/apiary", "/_next/static/app.js"]) {
+    for (const path of [
+      "/",
+      "/concepts",
+      "/api-reference",
+      "/openapi.json",
+      "/apiary",
+      "/_astro/app.js",
+      "/blume-search.json",
+      "/llms.txt",
+    ]) {
       const { bindings, apiRequests, assetRequests } = gateway()
       const request = new Request(`https://kronik.informati.dev${path}`)
       const response = await gatewayResponse(request, bindings)

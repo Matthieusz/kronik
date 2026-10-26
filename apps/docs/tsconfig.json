@@ -1,22 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "preserve",
-    "composite": true,
-    "incremental": true,
-    "types": ["bun"],
-    "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./*"] }
+    "types": ["bun"]
   },
-  "include": [
-    "next-env.d.ts",
-    ".next/types/**/*.ts",
-    "app/**/*.ts",
-    "app/**/*.tsx",
-    "lib/**/*.ts",
-    "scripts/**/*.ts",
-    "test/**/*.ts",
-    "worker.ts"
-  ],
-  "exclude": ["node_modules"]
+  "include": ["blume.config.ts", "lib/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "worker.ts"],
+  "exclude": ["node_modules", ".blume", "dist"]
 }
