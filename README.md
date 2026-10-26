@@ -34,6 +34,24 @@ bun dev
 
 Run the full verification suite with `bun run verify`.
 
+### Production deployment
+
+```bash
+bun run plan
+bun run deploy
+```
+
+Both commands explicitly target the `prod` stage. The production docs gateway owns
+`kronik.informati.dev` and forwards `/api/*` to that deployment's API Worker.
+Keep the same Alchemy profile, Cloudflare account, stage, and resource IDs across
+releases so deployments update the existing production resources. `bun dev`
+remains local development; do not use `--stage prod` for local development.
+
+Workers from older stages are not removed by deploying `prod`. Inventory them and
+verify the production domain and API before destroying an obsolete stage. Deleting
+an API Worker can also remove its Durable Object data; do not delete Workers or
+Alchemy state records indiscriminately.
+
 ### Documentation
 
 The [Blume](https://useblume.dev/) site in `apps/docs` requires Node.js 22.19 or newer.
