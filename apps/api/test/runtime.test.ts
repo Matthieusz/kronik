@@ -305,6 +305,8 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
 
 type TestStorage = ActivityObjectState["storage"] & {
   readonly seed: (key: string, value: Schema.Json) => void
+  readonly keys: () => ReadonlyArray<string>
+  readonly value: (key: string) => Schema.Json
 }
 
 const makeStorage = (): TestStorage => {
@@ -312,9 +314,22 @@ const makeStorage = (): TestStorage => {
 
   return {
     get: (key) => Effect.succeed(values.get(key)),
+    list: ({ limit, startAfter }) =>
+      Effect.sync(
+        () =>
+          new Map(
+            [...values.entries()]
+              .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+              .filter(([key]) => startAfter === undefined || key > startAfter)
+              .slice(0, limit),
+          ),
+      ),
     put: (key, value) => Effect.sync(() => void values.set(key, value)),
     delete: (key) => Effect.sync(() => values.delete(key)),
+    deleteMany: (keys) => Effect.sync(() => keys.filter((key) => values.delete(key)).length),
     seed: (key, value) => void values.set(key, value),
+    keys: () => [...values.keys()],
+    value: (key) => Schema.decodeUnknownSync(Schema.Json)(values.get(key)),
   }
 }
 
@@ -972,6 +987,228 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
       "2026-01-01T12:00:00.000Z",
       "2026-01-01T12:00:01.000Z",
     ])
+  })
+
+  test("removes expired persisted pagination snapshots when new snapshots are requested", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+
+          const url = "https://api.example.test/v1/users/MixedUser/commits?limit=1"
+          const first = yield* Effect.promise(() => web.handler(new Request(url)))
+          const firstKeys = mixed.storage.keys()
+          currentTime += 3_600_001
+
+          const second = yield* Effect.promise(() => web.handler(new Request(url)))
+
+          return {
+            statuses: [first.status, second.status],
+            firstKeys,
+            remainingKeys: mixed.storage.keys(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result.statuses).toEqual([200, 200])
+    expect(result.firstKeys).toHaveLength(1)
+    expect(result.remainingKeys).toHaveLength(1)
+    expect(result.remainingKeys[0]).not.toBe(result.firstKeys[0])
+  })
+
+  test("keeps usable stale records and removes expired records from every cache namespace", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+
+          const base = "https://api.example.test/v1/users/MixedUser/"
+          const paths = ["commits/latest", "commits", "activity", "streak"]
+
+          const initial = yield* Effect.forEach(paths, (path) =>
+            Effect.promise(() => web.handler(new Request(`${base}${path}`))),
+          )
+
+          const originalKeys = mixed.storage.keys()
+          const pageKey = originalKeys.find((key) => key.startsWith("commits-page-v1:"))
+
+          if (pageKey === undefined) return yield* Effect.die("Missing persisted page")
+
+          const page = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              kind: Schema.Literal("success"),
+              savedAt: Schema.Number,
+              value: CommitPage,
+            }),
+          )(mixed.storage.value(pageKey)).pipe(Effect.orDie)
+
+          mixed.storage.seed("commits-page-v1:future", { ...page, savedAt: fixedNow + 7_200_000 })
+          mixed.storage.seed("activity-summary-v1:malformed", { malformed: true })
+          mixed.storage.seed("commits-page-v1:non-finite", { ...page, savedAt: Number.NaN })
+          mixed.storage.seed("unrelated-key", { savedAt: fixedNow - 99_000_000 })
+          currentTime += 3_600_000
+          fakeGitHub.setMode("rate")
+          yield* mixed.replace
+
+          const boundary = yield* Effect.promise(() =>
+            web.handler(new Request(`${base}commits/latest`)),
+          )
+
+          const atBoundary = mixed.storage.keys()
+          currentTime += 1
+          yield* mixed.replace
+
+          const expired = yield* Effect.promise(() =>
+            web.handler(new Request(`${base}commits/latest`)),
+          )
+
+          const afterExpiry = mixed.storage.keys()
+          mixed.storage.seed("latest-commit-v1", { kind: "user-not-found", savedAt: fixedNow })
+
+          const negative = yield* Effect.promise(() =>
+            web.handler(new Request(`${base}commits/latest`)),
+          )
+
+          return {
+            initial: initial.map((response) => response.status),
+            originalKeys,
+            atBoundary,
+            boundary: { status: boundary.status, cache: boundary.headers.get("x-kronik-cache") },
+            expired: expired.status,
+            afterExpiry,
+            negative: negative.status,
+            afterNegative: mixed.storage.keys(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result.initial).toEqual([200, 200, 200, 200])
+    expect(result.originalKeys).toHaveLength(4)
+    expect(result.boundary).toEqual({ status: 200, cache: "stale" })
+    expect(result.atBoundary).toEqual(expect.arrayContaining(result.originalKeys))
+    expect(result.atBoundary).not.toContain("activity-summary-v1:malformed")
+    expect(result.atBoundary).not.toContain("commits-page-v1:non-finite")
+    expect(result.expired).toBe(429)
+    expect(result.afterExpiry.toSorted()).toEqual(["commits-page-v1:future", "unrelated-key"])
+    expect(result.negative).toBe(429)
+    expect(result.afterNegative.toSorted()).toEqual(["commits-page-v1:future", "unrelated-key"])
+  })
+
+  test("removes negative records after their shorter freshness window", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+
+          mixed.storage.seed("latest-commit-v1", { kind: "user-not-found", savedAt: fixedNow })
+          currentTime += 60_000
+
+          const base = "https://api.example.test/v1/users/MixedUser/"
+
+          const boundary = yield* Effect.promise(() =>
+            web.handler(new Request(`${base}commits/latest`)),
+          )
+
+          const atBoundary = mixed.storage.keys()
+          currentTime += 1
+          fakeGitHub.setMode("rate")
+
+          const after = yield* Effect.promise(() => web.handler(new Request(`${base}commits`)))
+
+          return {
+            boundary: boundary.status,
+            atBoundary,
+            after: after.status,
+            afterExpiry: mixed.storage.keys(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result.boundary).toBe(404)
+    expect(result.atBoundary).toContain("latest-commit-v1")
+    expect(result.after).toBe(429)
+    expect(result.afterExpiry).not.toContain("latest-commit-v1")
+  })
+
+  test("sweeps bounded batches across reactivations and wraps for keys inserted behind the cursor", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub)
+
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+
+          const base = "https://api.example.test/v1/users/MixedUser/"
+          yield* Effect.promise(() => web.handler(new Request(`${base}commits`)))
+
+          const pageKey = mixed.storage.keys().find((key) => key.startsWith("commits-page-v1:"))
+
+          if (pageKey === undefined) return yield* Effect.die("Missing persisted page")
+
+          const page = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              kind: Schema.Literal("success"),
+              savedAt: Schema.Number,
+              value: CommitPage,
+            }),
+          )(mixed.storage.value(pageKey)).pipe(Effect.orDie)
+
+          for (let index = 0; index < 80; index += 1) {
+            mixed.storage.seed(`commits-page-v1:${String(index).padStart(3, "0")}`, page)
+          }
+
+          mixed.storage.seed("cache-cleanup-cursor-v1", { malformed: true })
+          currentTime += 3_600_001
+          fakeGitHub.setMode("rate")
+
+          const counts: Array<number> = []
+          const cursorPresent: Array<boolean> = []
+
+          const sweep = Effect.fn("RuntimeTest.sweep")(function* () {
+            yield* Effect.promise(() => web.handler(new Request(`${base}commits/latest`)))
+            counts.push(
+              mixed.storage.keys().filter((key) => key.startsWith("commits-page-v1:")).length,
+            )
+            cursorPresent.push(mixed.storage.keys().includes("cache-cleanup-cursor-v1"))
+          })
+
+          yield* sweep()
+          mixed.storage.seed("commits-page-v1:000-late", page)
+          yield* mixed.replace
+          yield* sweep()
+          yield* mixed.replace
+          yield* sweep()
+          yield* mixed.replace
+          yield* sweep()
+
+          return { counts, cursorPresent }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result.counts).toEqual([50, 19, 1, 0])
+    expect(result.cursorPresent).toEqual([true, true, false, false])
   })
 
   test("coalesces summary and streak public misses independently", async () => {
