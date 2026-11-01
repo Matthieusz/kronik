@@ -16,8 +16,10 @@ import { makeWebHandler } from "../src/http.js"
 import {
   Clock,
   Context,
+  Deferred,
   Duration,
   Effect,
+  Fiber,
   Layer,
   Match,
   Option,
@@ -344,9 +346,8 @@ interface Coordinator {
 const makeCoordinatorImpl = Effect.fn("RuntimeTest.makeCoordinator")(function* (
   objectName: string,
   fakeGitHub: FakeGitHub,
+  storage: TestStorage,
 ) {
-  const storage = makeStorage()
-
   const runtime = yield* activityRuntime().pipe(
     Effect.provide(
       Layer.mergeAll(
@@ -421,8 +422,9 @@ const makeCoordinatorImpl = Effect.fn("RuntimeTest.makeCoordinator")(function* (
 const makeCoordinator = (
   objectName: string,
   fakeGitHub: FakeGitHub,
+  storage: TestStorage = makeStorage(),
 ): Effect.Effect<Coordinator, never, Clock.Clock | Scope.Scope> =>
-  makeCoordinatorImpl(objectName, fakeGitHub).pipe(
+  makeCoordinatorImpl(objectName, fakeGitHub, storage).pipe(
     Effect.provide(Layer.succeed(Clock.Clock, clock)),
   )
 
@@ -1104,6 +1106,117 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
     expect(result.afterExpiry.toSorted()).toEqual(["commits-page-v1:future", "unrelated-key"])
     expect(result.negative).toBe(429)
     expect(result.afterNegative.toSorted()).toEqual(["commits-page-v1:future", "unrelated-key"])
+  })
+
+  test("preserves a concurrent refresh when cleanup has already listed the expired record", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const refreshStarted = yield* Deferred.make<void>()
+          const allowRefresh = yield* Deferred.make<void>()
+          const sweepListed = yield* Deferred.make<void>()
+          const allowSweep = yield* Deferred.make<void>()
+          const writeRequested = yield* Deferred.make<void>()
+          const baseStorage = makeStorage()
+          const baseGitHub = makeFakeGitHub()
+          let refreshing = false
+          let pauseSweep = false
+
+          const storage: TestStorage = {
+            ...baseStorage,
+            list: (options) =>
+              Effect.gen(function* () {
+                const entries = yield* baseStorage.list(options)
+
+                if (pauseSweep) {
+                  pauseSweep = false
+                  yield* Deferred.succeed(sweepListed, undefined)
+                  yield* Deferred.await(allowSweep)
+                }
+
+                return entries
+              }),
+            put: (key, value) => {
+              // Signal effect construction, before the lifecycle acquires its write permit.
+              // Waiting inside the put effect would deadlock behind the paused sweep.
+              if (refreshing && key === "latest-commit-v1")
+                Deferred.doneUnsafe(writeRequested, Effect.void)
+
+              return baseStorage.put(key, value)
+            },
+          }
+
+          const fakeGitHub: FakeGitHub = {
+            ...baseGitHub,
+            client: HttpClient.make((request, url) =>
+              Effect.gen(function* () {
+                if (refreshing && url.pathname.includes("/commits/")) {
+                  yield* Deferred.succeed(refreshStarted, undefined)
+                  yield* Deferred.await(allowRefresh)
+                }
+
+                return yield* baseGitHub.client.execute(request)
+              }),
+            ),
+          }
+
+          const mixed = yield* makeCoordinator("mixeduser", fakeGitHub, storage)
+
+          const web = yield* makeWebWithNamespace({
+            getByName: () => Effect.succeed(mixed.client),
+          })
+
+          const base = "https://api.example.test/v1/users/MixedUser/"
+          yield* Effect.promise(() => web.handler(new Request(`${base}commits/latest`)))
+          currentTime += 60_001
+          refreshing = true
+
+          const refresh = yield* Effect.promise(() =>
+            web.handler(new Request(`${base}commits/latest`)),
+          ).pipe(Effect.forkScoped)
+
+          yield* Deferred.await(refreshStarted)
+          // The old success expires while its replacement is still being fetched.
+          currentTime = fixedNow + 3_600_001
+          pauseSweep = true
+
+          const sweep = yield* Effect.promise(() =>
+            web.handler(new Request(`${base}activity`)),
+          ).pipe(Effect.forkScoped)
+
+          yield* Deferred.await(sweepListed)
+          yield* Deferred.succeed(allowRefresh, undefined)
+          yield* Deferred.await(writeRequested)
+          // Let the writer run until it completes or suspends on the sweep's permit.
+          yield* Effect.yieldNow
+          yield* Deferred.succeed(allowSweep, undefined)
+
+          const refreshed = yield* Fiber.join(refresh)
+          const swept = yield* Fiber.join(sweep)
+
+          // A new object must still be able to recover the refreshed persisted success.
+          refreshing = false
+          yield* mixed.replace
+          baseGitHub.setMode("rate")
+
+          const recovered = yield* Effect.promise(() =>
+            web.handler(new Request(`${base}commits/latest`)),
+          )
+
+          return {
+            statuses: [refreshed.status, swept.status, recovered.status],
+            cache: recovered.headers.get("x-kronik-cache"),
+            persisted: mixed.storage.keys().includes("latest-commit-v1")
+              ? mixed.storage.value("latest-commit-v1")
+              : undefined,
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result.statuses).toEqual([200, 200, 200])
+    expect(result.cache).toBe("stale")
+    expect(result.persisted).toMatchObject({ kind: "success", savedAt: fixedNow + 60_001 })
   })
 
   test("removes negative records after their shorter freshness window", async () => {
