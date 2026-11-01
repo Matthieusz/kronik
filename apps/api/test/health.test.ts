@@ -64,7 +64,10 @@ describe("health walking skeleton", () => {
   })
 
   test("serves the generated full contract document", async () => {
-    const web = await Effect.runPromise(Effect.scoped(makeWebHandler(docsUrl)))
+    const web = await Effect.runPromise(
+      Effect.scoped(makeWebHandler(docsUrl, { activityCacheService: healthOnlyActivity })),
+    )
+
     const response = await web.handler(new Request("https://api.example.test/openapi.json"))
     const body = await response.text()
 
@@ -78,7 +81,10 @@ describe("health walking skeleton", () => {
   })
 
   test("redirects docs to the configured site", async () => {
-    const web = await Effect.runPromise(Effect.scoped(makeWebHandler(docsUrl)))
+    const web = await Effect.runPromise(
+      Effect.scoped(makeWebHandler(docsUrl, { activityCacheService: healthOnlyActivity })),
+    )
+
     const response = await web.handler(new Request("https://api.example.test/docs"))
 
     expect(response.status).toBe(302)
@@ -88,7 +94,10 @@ describe("health walking skeleton", () => {
   })
 
   test("returns not found for an unknown route", async () => {
-    const web = await Effect.runPromise(Effect.scoped(makeWebHandler(docsUrl)))
+    const web = await Effect.runPromise(
+      Effect.scoped(makeWebHandler(docsUrl, { activityCacheService: healthOnlyActivity })),
+    )
+
     const response = await web.handler(new Request("https://api.example.test/"))
 
     expect(response.status).toBe(404)

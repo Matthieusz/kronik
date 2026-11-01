@@ -11,7 +11,7 @@ import {
   IsoDate,
   IsoTimestamp,
 } from "@kronik/contract/model"
-import { StreakRpcs } from "@kronik/contract/rpc"
+import { Rpcs } from "@kronik/contract/rpc"
 import { DurableObjectState, RpcDurableObject } from "@alchemy.run/cloudflare"
 import { Clock, Context, Effect, Layer, Match, Result, Schema, Scope } from "effect"
 import { RpcSerialization, RpcServer } from "effect/rpc"
@@ -107,7 +107,7 @@ const normalizeActivityError = (error: ApiError.DomainErrors): ApiError.DomainEr
 
 /** Schema-validated Durable Object keyed by normalized requested username. */
 export class ActivityObject extends RpcDurableObject<ActivityObject>()("KronikActivity", {
-  schema: StreakRpcs,
+  schema: Rpcs,
 }) {}
 
 const pageKey = (request: PageRequest): string => JSON.stringify(request)
@@ -161,7 +161,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
     }),
   })
 
-  const handlers = StreakRpcs.toLayer({
+  const handlers = Rpcs.toLayer({
     latestCommit: (payload) =>
       Effect.gen(function* () {
         const objectName = state.objectName
@@ -312,7 +312,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
       }),
   })
 
-  return yield* RpcServer.toHttpEffect(StreakRpcs).pipe(
+  return yield* RpcServer.toHttpEffect(Rpcs).pipe(
     // The Durable Object initializer is this RPC server's composition root.
     // oxlint-disable-next-line effecttsgo/strict-effect-provide
     Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),

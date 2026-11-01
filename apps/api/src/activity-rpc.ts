@@ -1,7 +1,7 @@
 export * as ActivityRpcClient from "./activity-rpc.js"
 
 import { ApiError } from "@kronik/contract/errors"
-import { Context, Effect, Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { ActivityObject } from "./activity-object.js"
 import { UserActivity } from "./user-activity.js"
 
@@ -82,21 +82,7 @@ export const layerWithNamespace = (namespace: ActivityNamespace) => {
     }),
   })
 
-  const service = UserActivity.StreakService.of({
-    latestCommit: (username) =>
-      cacheAware.latestCommit(username).pipe(Effect.map(({ value }) => value)),
-    commits: (input) => cacheAware.commits(input).pipe(Effect.map(({ value }) => value)),
-    summarize: (input) => cacheAware.summarize(input).pipe(Effect.map(({ value }) => value)),
-    streak: (username) => cacheAware.streak(username).pipe(Effect.map(({ value }) => value)),
-  })
-
-  return Layer.succeedContext(
-    Context.empty().pipe(
-      Context.add(UserActivity.CacheAwareService, cacheAware),
-      Context.add(UserActivity.SummaryService, service),
-      Context.add(UserActivity.StreakService, service),
-    ),
-  )
+  return Layer.succeed(UserActivity.CacheAwareService, cacheAware)
 }
 
 /** Bind the live Cloudflare Durable Object namespace. */
@@ -107,6 +93,3 @@ export const activityRpcLayer = Layer.unwrap(
     return layerWithNamespace(namespace)
   }),
 )
-
-/** The live RPC layer retained as the package's default layer name. */
-export const layer = activityRpcLayer

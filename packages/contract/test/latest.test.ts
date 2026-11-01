@@ -6,7 +6,7 @@ import {
   LatestActivityGroup,
   LatestCommitEndpoint,
 } from "../src/api.js"
-import { CommitRpcs, LatestCommitRpcs } from "../src/rpc.js"
+import { Rpcs } from "../src/rpc.js"
 
 const latest = {
   username: "OctoCat",
@@ -22,7 +22,7 @@ describe("latest commit contract", () => {
 
   test("declares the paginated commit route and rejects mixed RPC modes", () => {
     expect(CommitsEndpoint.path).toBe("/v1/users/:username/commits")
-    const procedure = CommitRpcs.requests.get("commits")
+    const procedure = Rpcs.requests.get("commits")
 
     if (procedure === undefined) throw new Error("commits RPC is not declared")
 
@@ -54,7 +54,7 @@ describe("latest commit contract", () => {
   })
 
   test("decodes the latest RPC payload at runtime", () => {
-    const procedure = LatestCommitRpcs.requests.get("latestCommit")
+    const procedure = Rpcs.requests.get("latestCommit")
 
     if (procedure === undefined) throw new Error("latestCommit RPC is not declared")
 

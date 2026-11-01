@@ -69,7 +69,7 @@ const problem = (kind: string): ApiError.DomainErrors => {
   })
 }
 
-const failingService = (error: ApiError.DomainErrors): UserActivity.Interface => ({
+const failingService = (error: ApiError.DomainErrors): UserActivity.CacheAwareInterface => ({
   latestCommit: () => Effect.fail(error),
   commits: () => Effect.fail(error),
   summarize: () => Effect.fail(error),
@@ -94,7 +94,7 @@ describe("public problem projection", () => {
       const web = await Effect.runPromise(
         Effect.scoped(
           makeWebHandler(new URL("https://docs.example.test"), {
-            activityService: failingService(problem(kind)),
+            activityCacheService: failingService(problem(kind)),
             requestId: () => "problem-test",
           }),
         ),

@@ -1,10 +1,10 @@
 /* oxlint-disable effecttsgo/strict-effect-provide */
 
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
-import { LatestCommit } from "@kronik/contract/model"
+import { Effect, Exit, Schema } from "effect"
+import { GitHubUsername, LatestCommit } from "@kronik/contract/model"
 import { CommitDomain } from "../src/commit-domain.js"
-import { latestTestLayer } from "./activity-rpc-test-layer.js"
+import { activityTestLayer, unusedActivity } from "./activity-rpc-test-layer.js"
 import { makeWebHandler } from "../src/http.js"
 import { UserActivity } from "../src/user-activity.js"
 
@@ -34,38 +34,75 @@ const latest = Schema.decodeUnknownSync(LatestCommit)({
 })
 
 describe("latest commit public route", () => {
-  test("delegates through the schema-aware RPC client", async () => {
+  test.each(["fresh", "stale"] as const)(
+    "preserves %s provenance through schema-validated RPC",
+    async (cacheState) => {
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const activity = yield* UserActivity.CacheAwareService
+
+            const web = yield* makeWebHandler(new URL("https://docs.example.test"), {
+              activityCacheService: activity,
+            })
+
+            const response = yield* Effect.promise(() =>
+              web.handler(
+                new Request("https://api.example.test/v1/users/canonicaluser/commits/latest"),
+              ),
+            )
+
+            return {
+              status: response.status,
+              body: yield* Effect.promise(() => response.json()),
+              cache: response.headers.get("x-kronik-cache"),
+              warning: response.headers.get("warning"),
+            }
+          }).pipe(
+            Effect.provide(
+              activityTestLayer({
+                ...unusedActivity,
+                latestCommit: () => Effect.succeed({ value: latest, cacheState }),
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(result.status).toBe(200)
+      expect(result.body).toEqual(latest)
+      expect(result.cache).toBe(cacheState === "stale" ? "stale" : "miss")
+      expect(result.warning).toBe(cacheState === "stale" ? '110 - "Response is stale"' : null)
+    },
+  )
+
+  test("rejects an invalid result at the serialized RPC seam", async () => {
     const result = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const latestService = yield* UserActivity.LatestService
+          const activity = yield* UserActivity.CacheAwareService
+          const username = yield* Schema.decodeUnknownEffect(GitHubUsername)("canonicaluser")
 
-          const web = yield* makeWebHandler(new URL("https://docs.example.test"), {
-            latestService,
-          })
-
-          const response = yield* Effect.promise(() =>
-            web.handler(
-              new Request("https://api.example.test/v1/users/canonicaluser/commits/latest"),
-            ),
-          )
-
-          return {
-            status: response.status,
-            body: yield* Effect.promise(() => response.json()),
-          }
+          return yield* Effect.exit(activity.latestCommit(username))
         }).pipe(
           Effect.provide(
-            latestTestLayer({
-              latestCommit: () => Effect.succeed(latest),
+            activityTestLayer({
+              ...unusedActivity,
+              latestCommit: () =>
+                Effect.succeed({
+                  value: {
+                    ...latest,
+                    commit: { ...latest.commit, additions: -1 },
+                  },
+                  cacheState: "fresh",
+                }),
             }),
           ),
         ),
       ),
     )
 
-    expect(result.status).toBe(200)
-    expect(result.body).toEqual(latest)
+    expect(Exit.isFailure(result)).toBe(true)
   })
 
   test("bounds UTF-8 messages without splitting Unicode", () => {

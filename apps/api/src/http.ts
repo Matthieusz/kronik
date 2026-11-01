@@ -92,38 +92,6 @@ const invalidRequestResponse = () =>
     { status: 400, contentType: "application/problem+json" },
   )
 
-const unavailable = <A>(): Effect.Effect<A, ApiError.DomainErrors> =>
-  Effect.die("The requested activity capability is not installed")
-
-const makeActivityService = (options: ApplicationOptions): UserActivity.Interface => ({
-  latestCommit:
-    options.activityService?.latestCommit ??
-    options.latestService?.latestCommit ??
-    (() => unavailable()),
-  commits:
-    options.activityService?.commits ?? options.commitsService?.commits ?? (() => unavailable()),
-  summarize:
-    options.activityService?.summarize ??
-    options.summaryService?.summarize ??
-    (() => unavailable()),
-  streak: options.activityService?.streak ?? options.streakService?.streak ?? (() => unavailable()),
-})
-
-const freshLookup = <A>(effect: Effect.Effect<A, ApiError.DomainErrors>) =>
-  effect.pipe(Effect.map((value) => ({ value, cacheState: "fresh" as const })))
-
-const makeCacheAwareService = (options: ApplicationOptions): UserActivity.CacheAwareInterface => {
-  if (options.activityCacheService !== undefined) return options.activityCacheService
-  const activity = makeActivityService(options)
-
-  return {
-    latestCommit: (username) => freshLookup(activity.latestCommit(username)),
-    commits: (input) => freshLookup(activity.commits(input)),
-    summarize: (input) => freshLookup(activity.summarize(input)),
-    streak: (username) => freshLookup(activity.streak(username)),
-  }
-}
-
 const activityResponse = <A extends { readonly user: { readonly login: string } }>({
   value,
   cacheState,
@@ -207,42 +175,19 @@ export const applicationLayer = (docsUrl: URL) =>
     Layer.provide([Etag.layer, HttpPlatformStub, FileSystem.layerNoop({}), Path.layer]),
   )
 
-/** Compatibility aliases retained for package-local slice tests; all use the full API now. */
-export const latestApplicationLayer = applicationLayer
-
-/** Compatibility alias for the full application. */
-export const commitsApplicationLayer = applicationLayer
-
-/** Compatibility alias for the full application. */
-export const summaryApplicationLayer = applicationLayer
-
-/** Compatibility alias for the full application. */
-export const streakApplicationLayer = applicationLayer
-
+/** The complete activity implementation and optional public edge policy adapters. */
 export interface ApplicationOptions extends PublicPolicyOptions {
-  /** The complete activity service used by the Worker runtime. */
-  readonly activityService?: UserActivity.Interface
-  /** The activity service with Durable Object cache provenance. */
-  readonly activityCacheService?: UserActivity.CacheAwareInterface
-  /** Compatibility seam for latest-route tests. */
-  readonly latestService?: UserActivity.LatestInterface
-  /** Compatibility seam for commit-route tests. */
-  readonly commitsService?: UserActivity.CommitsInterface
-  /** Compatibility seam for summary-route tests. */
-  readonly summaryService?: UserActivity.SummaryInterface
-  /** Compatibility seam for streak-route tests. */
-  readonly streakService?: UserActivity.StreakInterface
+  /** The complete activity interface with Durable Object cache provenance. */
+  readonly activityCacheService: UserActivity.CacheAwareInterface
 }
 
 const buildHttpEffect = Effect.fn("Api.buildHttpEffect")(function* (
   docsUrl: URL,
-  options: ApplicationOptions = {},
+  options: ApplicationOptions,
 ) {
-  const service = makeCacheAwareService(options)
-
   const httpEffect = yield* HttpRouter.toHttpEffect(
     applicationLayer(docsUrl).pipe(
-      Layer.provide(Layer.succeed(UserActivity.CacheAwareService, service)),
+      Layer.provide(Layer.succeed(UserActivity.CacheAwareService, options.activityCacheService)),
     ),
   )
 
@@ -675,7 +620,7 @@ export const makePublicResponse = async (
 /** Build the initialized full v1 HTTP effect. */
 export const makeHttpEffect = Effect.fn("Api.makeHttpEffect")(function* (
   docsUrl: URL,
-  options: ApplicationOptions = {},
+  options: ApplicationOptions,
 ) {
   return yield* buildHttpEffect(docsUrl, options)
 })
@@ -683,7 +628,7 @@ export const makeHttpEffect = Effect.fn("Api.makeHttpEffect")(function* (
 /** Build a Fetch handler with the complete public edge/API policy. */
 export const makeWebHandler = Effect.fn("Api.makeWebHandler")(function* (
   docsUrl: URL,
-  options: ApplicationOptions = {},
+  options: ApplicationOptions,
 ) {
   const httpEffect = yield* buildHttpEffect(docsUrl, options)
   const handler = (request: Request) => makePublicResponse(request, httpEffect, options)

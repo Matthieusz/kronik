@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test"
 import { ActivitySummary } from "@kronik/contract/model"
 import { Effect, Schema } from "effect"
-import { summaryTestLayer } from "./activity-rpc-test-layer.js"
+import { activityTestLayer, unusedActivity } from "./activity-rpc-test-layer.js"
 import { makeWebHandler } from "../src/http.js"
 import { UserActivity } from "../src/user-activity.js"
 
@@ -21,47 +21,57 @@ const summary = Schema.decodeUnknownSync(ActivitySummary)({
 })
 
 describe("activity summary public route", () => {
-  test("passes inclusive bounds through the schema-aware RPC client", async () => {
-    const inputs: Array<unknown> = []
+  test.each(["fresh", "stale"] as const)(
+    "passes inclusive bounds and %s provenance through schema-validated RPC",
+    async (cacheState) => {
+      const inputs: Array<unknown> = []
 
-    const service: UserActivity.SummaryInterface = {
-      latestCommit: () => Effect.die("not used"),
-      commits: () => Effect.die("not used"),
-      summarize: (input) => {
-        inputs.push(input)
+      const service: UserActivity.CacheAwareInterface = {
+        ...unusedActivity,
+        summarize: (input) => {
+          inputs.push(input)
 
-        return Effect.succeed(summary)
-      },
-    }
+          return Effect.succeed({ value: summary, cacheState })
+        },
+      }
 
-    const result = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const activity = yield* UserActivity.SummaryService
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const activity = yield* UserActivity.CacheAwareService
 
-          const web = yield* makeWebHandler(new URL("https://docs.example.test"), {
-            summaryService: activity,
-          })
+            const web = yield* makeWebHandler(new URL("https://docs.example.test"), {
+              activityCacheService: activity,
+            })
 
-          const response = yield* Effect.promise(() =>
-            web.handler(
-              new Request(
-                "https://api.example.test/v1/users/MixedUser/activity?from=2024-02-01&to=2024-03-01",
+            const response = yield* Effect.promise(() =>
+              web.handler(
+                new Request(
+                  "https://api.example.test/v1/users/MixedUser/activity?from=2024-02-01&to=2024-03-01",
+                ),
               ),
-            ),
-          )
+            )
 
-          return {
-            status: response.status,
-            body: yield* Effect.promise(() => response.json()),
-          }
-        }).pipe(Effect.provide(summaryTestLayer(service))),
-      ),
-    )
+            return {
+              status: response.status,
+              body: yield* Effect.promise(() => response.json()),
+              cache: response.headers.get("x-kronik-cache"),
+              warning: response.headers.get("warning"),
+            }
+          }).pipe(Effect.provide(activityTestLayer(service))),
+        ),
+      )
 
-    expect(result.status).toBe(200)
-    expect(result.body).toEqual(summary)
-    expect(inputs).toHaveLength(1)
-    expect(inputs[0]).toMatchObject({ username: "MixedUser", from: "2024-02-01", to: "2024-03-01" })
-  })
+      expect(result.status).toBe(200)
+      expect(result.body).toEqual(summary)
+      expect(result.cache).toBe(cacheState === "stale" ? "stale" : "miss")
+      expect(result.warning).toBe(cacheState === "stale" ? '110 - "Response is stale"' : null)
+      expect(inputs).toHaveLength(1)
+      expect(inputs[0]).toMatchObject({
+        username: "MixedUser",
+        from: "2024-02-01",
+        to: "2024-03-01",
+      })
+    },
+  )
 })

@@ -9,6 +9,8 @@ import { Effect, Schema } from "effect"
 import { makeHttpEffect, makeMemoryEdgeCache, makeWebHandler } from "../src/http.js"
 import { makeWorkerResponse } from "../src/worker.js"
 import { Observability } from "../src/observability.js"
+import { UserActivity } from "../src/user-activity.js"
+import { unusedActivity } from "./activity-rpc-test-layer.js"
 
 const latest = Schema.decodeUnknownSync(LatestCommit)({
   user: {
@@ -57,12 +59,19 @@ const streak = Schema.decodeUnknownSync(ContributionStreak)({
   active: false,
 })
 
+const freshActivity: UserActivity.CacheAwareInterface = {
+  latestCommit: () => Effect.succeed({ value: latest, cacheState: "fresh" }),
+  commits: () => Effect.succeed({ value: page, cacheState: "fresh" }),
+  summarize: () => Effect.succeed({ value: summary, cacheState: "fresh" }),
+  streak: () => Effect.succeed({ value: streak, cacheState: "fresh" }),
+}
+
 describe("public edge policy", () => {
   test("uses the initialized Worker policy composition", async () => {
     const httpEffect = await Effect.runPromise(
       Effect.scoped(
         makeHttpEffect(new URL("https://docs.example.test"), {
-          latestService: { latestCommit: () => Effect.succeed(latest) },
+          activityCacheService: unusedActivity,
         }),
       ),
     )
@@ -86,6 +95,7 @@ describe("public edge policy", () => {
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
+          activityCacheService: unusedActivity,
           requestId: () => "generated-id",
         }),
       ),
@@ -117,18 +127,18 @@ describe("public edge policy", () => {
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
-          activityService: {
+          activityCacheService: {
+            ...unusedActivity,
             latestCommit: () =>
               Effect.scoped(
-                Effect.acquireRelease(Effect.succeed(latest), () =>
-                  Effect.sync(() => {
-                    releases += 1
-                  }),
+                Effect.acquireRelease(
+                  Effect.succeed({ value: latest, cacheState: "fresh" as const }),
+                  () =>
+                    Effect.sync(() => {
+                      releases += 1
+                    }),
                 ),
               ),
-            commits: () => Effect.die("not used"),
-            summarize: () => Effect.die("not used"),
-            streak: () => Effect.die("not used"),
           },
         }),
       ),
@@ -149,11 +159,12 @@ describe("public edge policy", () => {
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
-          latestService: {
+          activityCacheService: {
+            ...freshActivity,
             latestCommit: () => {
               calls += 1
 
-              return Effect.succeed(latest)
+              return Effect.succeed({ value: latest, cacheState: "fresh" })
             },
           },
         }),
@@ -185,7 +196,7 @@ describe("public edge policy", () => {
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
-          latestService: { latestCommit: () => Effect.succeed(latest) },
+          activityCacheService: freshActivity,
           observability: {
             record: (event) => {
               events.push(event)
@@ -235,6 +246,7 @@ describe("public edge policy", () => {
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
+          activityCacheService: unusedActivity,
           rateLimiter: {
             check: async () => {
               calls += 1
@@ -277,12 +289,7 @@ describe("public edge policy", () => {
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
-          activityService: {
-            latestCommit: () => Effect.succeed(latest),
-            commits: () => Effect.succeed(page),
-            summarize: () => Effect.succeed(summary),
-            streak: () => Effect.succeed(streak),
-          },
+          activityCacheService: freshActivity,
           edgeCache: makeMemoryEdgeCache(() => now),
           requestId: () => "ttl-test",
         }),
@@ -321,11 +328,12 @@ describe("public edge policy", () => {
     const web = await Effect.runPromise(
       Effect.scoped(
         makeWebHandler(new URL("https://docs.example.test"), {
-          latestService: {
+          activityCacheService: {
+            ...freshActivity,
             latestCommit: () => {
               calls += 1
 
-              return Effect.succeed(latest)
+              return Effect.succeed({ value: latest, cacheState: "fresh" })
             },
           },
           edgeCache: makeMemoryEdgeCache(() => now),

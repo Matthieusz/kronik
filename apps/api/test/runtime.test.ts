@@ -5,7 +5,7 @@
 
 import { beforeEach, describe, expect, test } from "bun:test"
 import { CommitPage, GitHubUsername, LatestCommit } from "@kronik/contract/model"
-import { StreakRpcs } from "@kronik/contract/rpc"
+import { Rpcs } from "@kronik/contract/rpc"
 import { ActivityState, activityRuntime } from "../src/activity-object.js"
 import type { ActivityObjectState } from "../src/activity-object.js"
 import { ActivityRpcClient } from "../src/activity-rpc.js"
@@ -388,7 +388,7 @@ const makeCoordinatorImpl = Effect.fn("RuntimeTest.makeCoordinator")(function* (
     HttpClient.mapRequest(transport, HttpClientRequest.prependUrl("http://local")),
   ).pipe(Effect.provide(RpcSerialization.layerNdjson))
 
-  const client = yield* RpcClient.make(StreakRpcs).pipe(
+  const client = yield* RpcClient.make(Rpcs).pipe(
     Effect.provide(Layer.succeed(RpcClient.Protocol, protocol)),
   )
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Result, Schema } from "effect"
 import { StreakEndpoint, StreakApi } from "../src/api.js"
 import { ContributionStreak } from "../src/model.js"
-import { StreakPayload, StreakRpcs } from "../src/rpc.js"
+import { Rpcs, StreakPayload } from "../src/rpc.js"
 
 describe("contribution streak contract", () => {
   test("declares the public route and full slice API", () => {
@@ -11,7 +11,7 @@ describe("contribution streak contract", () => {
   })
 
   test("requires a 365-day range and derives active from current streak", () => {
-    const procedure = StreakRpcs.requests.get("streak")
+    const procedure = Rpcs.requests.get("streak")
 
     if (procedure === undefined) throw new Error("streak RPC is not declared")
 

@@ -44,9 +44,6 @@ const latestCommit = Rpc.make("latestCommit", {
   error: DomainErrors,
 })
 
-/** The slice 2 RPC group. No unfinished procedures cross the runtime boundary. */
-export class LatestCommitRpcs extends RpcGroup.make(latestCommit) {}
-
 const CommitLimit = Schema.Number.pipe(
   Schema.check(Schema.isInt()),
   Schema.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
@@ -89,15 +86,6 @@ const streak = Rpc.make("streak", {
   success: CachedContributionStreak,
   error: DomainErrors,
 })
-
-/** The validated commit procedures exercised by the slice 3 runtime. */
-export class CommitRpcs extends RpcGroup.make(commits, latestCommit) {}
-
-/** The validated activity-summary procedures exercised by slice 4. */
-export class SummaryRpcs extends RpcGroup.make(commits, latestCommit, summary) {}
-
-/** The validated activity procedures exercised by the slice 5 runtime. */
-export class StreakRpcs extends RpcGroup.make(commits, latestCommit, summary, streak) {}
 
 /** Full Worker-to-Durable-Object activity procedure declarations. */
 export class Rpcs extends RpcGroup.make(commits, latestCommit, summary, streak) {}
