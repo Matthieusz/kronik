@@ -179,19 +179,13 @@ class ProviderFailure extends Schema.TaggedError<
 /** Narrow adapter interface used by UserActivity and Durable Object tests. */
 export interface Interface {
   /** Resolve and hydrate the latest matching public commit. */
-  readonly latestCommit: (
-    username: GitHubUsername,
-  ) => Effect.Effect<LatestCommit, ApiError.DomainErrors>
+  readonly latestCommit: (username: GitHubUsername) => Effect.Effect<LatestCommit, Failure>
   /** Search and hydrate one stable page of matching public commits. */
-  readonly commits: (
-    input: CommitPageInput,
-  ) => Effect.Effect<CommitPageEvidence, ApiError.DomainErrors>
+  readonly commits: (input: CommitPageInput) => Effect.Effect<CommitPageEvidence, Failure>
   /** Search and hydrate at most 100 matching commits and their repository languages. */
-  readonly activity: (
-    input: ActivityInput,
-  ) => Effect.Effect<ActivityEvidence, ApiError.DomainErrors>
+  readonly activity: (input: ActivityInput) => Effect.Effect<ActivityEvidence, Failure>
   /** Read the requested user's bounded contribution calendar. */
-  readonly streak: (input: StreakInput) => Effect.Effect<StreakEvidence, ApiError.DomainErrors>
+  readonly streak: (input: StreakInput) => Effect.Effect<StreakEvidence, Failure>
 }
 
 /** Effect service for GitHub's official HTTP API. */
@@ -210,9 +204,16 @@ const decodeResponse =
       )
     })
 
-const AuthorizationFailureDetail = "Kronik's GitHub credential was rejected"
+/** Credential rejection is never eligible for stale fallback; public wording carries no policy. */
+export class CredentialRejected extends Schema.TaggedError<
+  CredentialRejected,
+  { readonly brand: unique symbol }
+>()("GitHub.CredentialRejected", {}) {}
 
-const classifyProviderFailure = (failure: ProviderFailure): ApiError.DomainErrors => {
+/** Failures exposed by the GitHub adapter before public problem projection. */
+export type Failure = ApiError.DomainErrors | CredentialRejected
+
+const classifyProviderFailure = (failure: ProviderFailure): Failure => {
   const instance = "urn:kronik:github"
 
   const common = {
@@ -222,11 +223,7 @@ const classifyProviderFailure = (failure: ProviderFailure): ApiError.DomainError
   }
 
   if (failure.kind === "status" && (failure.status === 401 || failure.status === 403)) {
-    return new ApiError.UpstreamFailure({
-      ...common,
-      detail: AuthorizationFailureDetail,
-      status: 502,
-    })
+    return new CredentialRejected({})
   }
 
   if (failure.kind === "rate") {

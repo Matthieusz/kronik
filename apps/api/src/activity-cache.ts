@@ -9,7 +9,6 @@ import {
   LatestCommit,
   User,
 } from "@kronik/contract/model"
-import { RuntimeContext } from "alchemy/RuntimeContext"
 import {
   Cache,
   Cause,
@@ -22,7 +21,8 @@ import {
   Schema,
   Semaphore,
 } from "effect"
-import { UserActivity } from "./user-activity.js"
+import { GitHub } from "./github.js"
+import type { UserActivity } from "./user-activity.js"
 
 const StoredNegative = Schema.Struct({
   kind: Schema.Literal("user-not-found"),
@@ -62,21 +62,18 @@ type StoredRecord<A> =
 /** Persistent operations used by the private Requested User cache lifecycle. */
 export interface ActivityStorage {
   /** Read a persisted value for schema decoding. */
-  readonly get: (key: string) => Effect.Effect<unknown, never, RuntimeContext>
+  readonly get: (key: string) => Effect.Effect<unknown>
   /** List an ordered, bounded page of persisted values. */
   readonly list: (options: {
     readonly limit: number
     readonly startAfter?: string
-  }) => Effect.Effect<ReadonlyMap<string, unknown>, never, RuntimeContext>
+  }) => Effect.Effect<ReadonlyMap<string, unknown>>
   /** Persist a cache record or cleanup cursor. */
-  readonly put: (
-    key: string,
-    value: StoredRecord<CachedValue> | string,
-  ) => Effect.Effect<void, never, RuntimeContext>
+  readonly put: (key: string, value: StoredRecord<CachedValue> | string) => Effect.Effect<void>
   /** Remove a malformed record or completed cleanup cursor. */
-  readonly delete: (key: string) => Effect.Effect<boolean, never, RuntimeContext>
+  readonly delete: (key: string) => Effect.Effect<boolean>
   /** Remove a bounded batch of obsolete records. */
-  readonly deleteMany: (keys: ReadonlyArray<string>) => Effect.Effect<number, never, RuntimeContext>
+  readonly deleteMany: (keys: ReadonlyArray<string>) => Effect.Effect<number>
 }
 
 interface Policy<A> {
@@ -130,8 +127,6 @@ const CleanupCursorKey = "cache-cleanup-cursor-v1"
 
 const CleanupBatchSize = 32
 
-const AuthorizationFailureDetail = "Kronik's GitHub credential was rejected"
-
 const userNotFound = () =>
   new ApiError.UserNotFound({
     type: "https://kronik.dev/problems/user-not-found",
@@ -150,9 +145,9 @@ const serviceUnavailable = () =>
     status: 503,
   })
 
-const isStaleFallbackFailure = (error: ApiError.DomainErrors): boolean =>
+const isStaleFallbackFailure = (error: GitHub.Failure): boolean =>
   error instanceof ApiError.RateLimited ||
-  (error instanceof ApiError.UpstreamFailure && error.detail !== AuthorizationFailureDetail) ||
+  error instanceof ApiError.UpstreamFailure ||
   error instanceof ApiError.ServiceUnavailable
 
 const policyForKey = (key: string): Policy<CachedValue> | undefined => {
@@ -170,15 +165,13 @@ const policyForKey = (key: string): Policy<CachedValue> | undefined => {
 /** Domain projections supplied by the coordinator; keys have already passed request validation. */
 export interface Loaders {
   /** Fetch the latest matching commit for a normalized Requested User. */
-  readonly latestCommit: (
-    username: GitHubUsername,
-  ) => Effect.Effect<LatestCommit, ApiError.DomainErrors>
+  readonly latestCommit: (username: GitHubUsername) => Effect.Effect<LatestCommit, GitHub.Failure>
   /** Decode a page key, fetch evidence, and project its Commit Summaries. */
-  readonly commits: (key: string) => Effect.Effect<CommitPage, ApiError.DomainErrors>
+  readonly commits: (key: string) => Effect.Effect<CommitPage, GitHub.Failure>
   /** Decode an Activity Window key and project its Activity Summary. */
-  readonly summarize: (key: string) => Effect.Effect<ActivitySummary, ApiError.DomainErrors>
+  readonly summarize: (key: string) => Effect.Effect<ActivitySummary, GitHub.Failure>
   /** Decode a calendar-range key and project its Contribution Streak. */
-  readonly streak: (key: string) => Effect.Effect<ContributionStreak, ApiError.DomainErrors>
+  readonly streak: (key: string) => Effect.Effect<ContributionStreak, GitHub.Failure>
 }
 
 /**
@@ -245,7 +238,7 @@ export const make = Effect.fn("ActivityCache.make")(function* (
 
   const makeLookup = <A extends CachedValue, K extends string>(
     policy: Policy<A>,
-    load: (key: K) => Effect.Effect<A, ApiError.DomainErrors>,
+    load: (key: K) => Effect.Effect<A, GitHub.Failure>,
   ) =>
     Cache.makeWith(
       (key: K) =>
@@ -324,7 +317,19 @@ export const make = Effect.fn("ActivityCache.make")(function* (
         Effect.fn("ActivityCache.lookup")(function* (key: K) {
           yield* cleanup()
 
-          return yield* Cache.get(cache, key)
+          return yield* Cache.get(cache, key).pipe(
+            Effect.catchTag("GitHub.CredentialRejected", () =>
+              Effect.fail(
+                new ApiError.UpstreamFailure({
+                  type: "https://kronik.dev/problems/upstream-failure",
+                  title: "GitHub unavailable",
+                  detail: "Kronik's GitHub credential was rejected",
+                  instance: "urn:kronik:github",
+                  status: 502,
+                }),
+              ),
+            ),
+          )
         }),
       ),
     )

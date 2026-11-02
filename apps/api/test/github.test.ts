@@ -4,6 +4,8 @@
 /* oxlint-disable effecttsgo/strict-effect-provide */
 
 import { describe, expect, test } from "bun:test"
+import { Result } from "effect"
+import { ApiError } from "@kronik/contract/errors"
 import { Configuration } from "../src/config.js"
 import { GitHub } from "../src/github.js"
 import { Observability } from "../src/observability.js"
@@ -417,6 +419,48 @@ describe("GitHub adapter", () => {
     expect(serialized).not.toContain(sha)
     expect(serialized).not.toContain("MixedUser")
   })
+
+  test.each([
+    { status: 401, remaining: "4999", expected: "credential" },
+    { status: 403, remaining: "4999", expected: "credential" },
+    { status: 403, remaining: "0", expected: "rate" },
+  ])(
+    "classifies $status with quota $remaining before public projection",
+    async ({ status, remaining, expected }) => {
+      const client = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response("{}", {
+              status,
+              headers: { "content-type": "application/json", "x-ratelimit-remaining": remaining },
+            }),
+          ),
+        ),
+      )
+
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const github = yield* GitHub.Service
+
+          return yield* Effect.result(github.latestCommit(username))
+        }).pipe(
+          Effect.provide(
+            GitHub.layerWithClient(client).pipe(
+              Layer.provide(Layer.succeed(Configuration, configuration)),
+            ),
+          ),
+        ),
+      )
+
+      expect(Result.isFailure(result)).toBe(true)
+
+      if (Result.isFailure(result))
+        expect(result.failure).toBeInstanceOf(
+          expected === "credential" ? GitHub.CredentialRejected : ApiError.RateLimited,
+        )
+    },
+  )
 
   test("resolves canonical identity and hydrates exact parents", async () => {
     const result = await Effect.runPromise(

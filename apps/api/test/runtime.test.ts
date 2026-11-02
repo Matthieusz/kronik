@@ -453,6 +453,34 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
     currentTime = fixedNow
     timeoutTimersEnabled = false
   })
+  test("rejects a Requested User that does not match the coordinator identity", async () => {
+    const result = await runWithTestClock(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fakeGitHub = makeFakeGitHub()
+          const other = yield* makeCoordinator("otheruser", fakeGitHub)
+          const web = yield* makeWebWithNamespace({ getByName: () => Effect.succeed(other.client) })
+
+          const response = yield* Effect.promise(() =>
+            web.handler(new Request("https://api.example.test/v1/users/MixedUser/commits/latest")),
+          )
+
+          return {
+            status: response.status,
+            body: yield* runJson(response),
+            searches: fakeGitHub.calls.searches(),
+          }
+        }),
+      ).pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
+    )
+
+    expect(result.status).toBe(400)
+    expect(result.body).toMatchObject({
+      detail: "The RPC username does not match the Durable Object identity",
+    })
+    expect(result.searches).toBe(0)
+  })
+
   test("proves one happy path for every public activity route", async () => {
     const result = await runWithTestClock(
       Effect.scoped(
