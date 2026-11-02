@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Result, Schema } from "effect"
-import { ActivitySummary, GitHubUsername, IsoDate } from "../src/model.js"
+import { ActivitySummary, CommitSummary, GitHubUsername, IsoDate } from "../src/model.js"
 
 const decode = Schema.decodeUnknownResult(GitHubUsername)
 
@@ -47,4 +47,39 @@ describe("GitHubUsername", () => {
     expect(Result.isFailure(decode("-octocat"))).toBe(true)
     expect(Result.isFailure(decode("octo--cat"))).toBe(true)
   })
+})
+
+describe("commit file counts", () => {
+  const commit = {
+    sha: "0123456789abcdef0123456789abcdef01234567",
+    url: "https://github.com/owner/repo/commit/0123456789abcdef0123456789abcdef01234567",
+    repository: { nameWithOwner: "owner/repo", url: "https://github.com/owner/repo" },
+    headline: "Update files",
+    body: "",
+    bodyTruncated: false,
+    authoredAt: "2026-01-01T00:00:00Z",
+    committedAt: "2026-01-01T00:00:00Z",
+    additions: 1,
+    deletions: 0,
+    changedLines: 1,
+    parents: [],
+  }
+
+  test.each([0, 5, null])(
+    "accepts a count or an explicit unavailable value: %s",
+    (filesChanged) => {
+      expect(
+        Result.isSuccess(Schema.decodeUnknownResult(CommitSummary)({ ...commit, filesChanged })),
+      ).toBe(true)
+    },
+  )
+
+  test.each([undefined, -1, 0.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects missing or invalid counts: %s",
+    (filesChanged) => {
+      expect(
+        Result.isFailure(Schema.decodeUnknownResult(CommitSummary)({ ...commit, filesChanged })),
+      ).toBe(true)
+    },
+  )
 })

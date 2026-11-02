@@ -490,12 +490,16 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
           )
 
           const latestResponse = responses[0]
+          const commitsResponse = responses[1]
+
+          if (commitsResponse === undefined) return yield* Effect.die("Missing commits response")
 
           if (latestResponse === undefined) return yield* Effect.die("Missing latest response")
 
           return {
             statuses: responses.map((response) => response.status),
             latest: yield* runJson(latestResponse),
+            commits: yield* runJson(commitsResponse),
             searches: fakeGitHub.calls.searches(),
           }
         }),
@@ -503,7 +507,11 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
     )
 
     expect(result.statuses).toEqual([200, 200, 200, 200])
-    expect(result.latest).toMatchObject({ user: { login: "MixedUser" } })
+    expect(result.latest).toMatchObject({
+      user: { login: "MixedUser" },
+      commit: { filesChanged: 2 },
+    })
+    expect(result.commits).toMatchObject({ items: [{ filesChanged: 2 }] })
     expect(result.searches).toBeGreaterThan(0)
   })
 

@@ -24,6 +24,7 @@ const commit = {
   committedAt: timestamp,
   additions: 3,
   deletions: 2,
+  filesChanged: 2,
   parents: [],
 } satisfies CommitDomain.Evidence
 

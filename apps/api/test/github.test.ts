@@ -389,5 +389,6 @@ describe("GitHub adapter", () => {
       { sha: commitSha, url: `https://github.com/owner/repo/commit/${sha}` },
     ])
     expect(result.commit.changedLines).toBe(4)
+    expect(result.commit.filesChanged).toBe(2)
   })
 })

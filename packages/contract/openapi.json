@@ -970,6 +970,19 @@
             "minimum": 0,
             "maximum": 9007199254740991
           },
+          "filesChanged": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Number of files changed in the commit, or null when GitHub cannot calculate it."
+          },
           "parents": {
             "type": "array",
             "items": {
@@ -989,6 +1002,7 @@
           "additions",
           "deletions",
           "changedLines",
+          "filesChanged",
           "parents"
         ],
         "additionalProperties": false

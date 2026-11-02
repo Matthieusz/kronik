@@ -15,6 +15,10 @@ Responses use the canonical GitHub login. Parent values are the actual commit gr
 references, not inferred links. Messages contain a headline and body; bodies over 8 KiB
 are bounded at both edges without splitting Unicode and are marked `bodyTruncated`.
 
+Each commit includes additions, deletions, total changed lines, and `filesChanged`,
+the number of files changed in that commit. `filesChanged` is `null` when GitHub
+cannot calculate the count; zero means the count is known and no files changed.
+
 ## Pagination
 
 The first commit-feed request chooses a page size from 1 through 100, defaulting to 10.

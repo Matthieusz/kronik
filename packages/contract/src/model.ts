@@ -127,6 +127,9 @@ export const CommitSummary = Schema.Struct({
   additions: SafeNatural,
   deletions: SafeNatural,
   changedLines: SafeNatural,
+  filesChanged: Schema.NullOr(SafeNatural).annotate({
+    description: "Number of files changed in the commit, or null when GitHub cannot calculate it.",
+  }),
   parents: Schema.Array(CommitParent),
 }).annotate({ identifier: "CommitSummary" })
 

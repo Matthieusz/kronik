@@ -351,5 +351,42 @@ describe("GitHub GraphQL batches", () => {
       expect(page).toBe(10)
     },
   )
+  test.each([0, 7, null])(
+    "returns filesChanged from GitHub, including unavailable counts: %s",
+    async (count) => {
+      const fixture = makeFixture({
+        count: 1,
+        modify: () => ({
+          data: {
+            c0: {
+              object: commitFixture(shaFor(0), "owner/repo-0", count),
+            },
+          },
+        }),
+      })
 
+      const result = await Effect.runPromise(fixture.commits)
+
+      expect(result.items[0]?.filesChanged).toBe(count)
+      expect(commitQueries(fixture.queries)[0]?.query).toContain("changedFilesIfAvailable")
+    },
+  )
+
+  test.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid GitHub file counts: %s",
+    async (count) => {
+      const fixture = makeFixture({
+        count: 1,
+        modify: () => ({
+          data: {
+            c0: {
+              object: commitFixture(shaFor(0), "owner/repo-0", count),
+            },
+          },
+        }),
+      })
+
+      await expectUpstreamFailure(fixture.commits)
+    },
+  )
 })

@@ -19,7 +19,11 @@ export const readGraphqlRequest = (request: HttpClientRequest) => {
 }
 
 /** A complete commit with one parent, without a REST repository field. */
-export const commitFixture = (sha: string, repository: string) => ({
+export const commitFixture = (
+  sha: string,
+  repository: string,
+  filesChanged: number | null = 2,
+) => ({
   oid: sha,
   url: `https://github.com/${repository}/commit/${sha}`,
   message: "Implement latest\n\nWith details",
@@ -27,6 +31,7 @@ export const commitFixture = (sha: string, repository: string) => ({
   committedDate: "2026-01-02T03:05:06Z",
   additions: 3,
   deletions: 1,
+  changedFilesIfAvailable: filesChanged,
   parents: {
     nodes: [{ oid: sha, url: `https://github.com/${repository}/commit/${sha}` }],
     pageInfo: { hasNextPage: false, endCursor: null },

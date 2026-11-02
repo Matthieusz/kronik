@@ -30,6 +30,7 @@ const latest = Schema.decodeUnknownSync(LatestCommit)({
     additions: 1,
     deletions: 0,
     changedLines: 1,
+    filesChanged: 1,
     parents: [],
   },
 })

@@ -1,7 +1,7 @@
 /* oxlint-disable effecttsgo/strict-effect-provide */
 
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit, Schema } from "effect"
+import { Effect, Exit, Result, Schema } from "effect"
 import { GitHubUsername, LatestCommit } from "@kronik/contract/model"
 import { CommitDomain } from "../src/commit-domain.js"
 import { activityTestLayer, unusedActivity } from "./activity-rpc-test-layer.js"
@@ -29,6 +29,7 @@ const latest = Schema.decodeUnknownSync(LatestCommit)({
     additions: 3,
     deletions: 1,
     changedLines: 4,
+    filesChanged: 2,
     parents: [],
   },
 })
@@ -113,4 +114,17 @@ describe("latest commit public route", () => {
     expect(new TextEncoder().encode(bounded.value).length).toBeLessThanOrEqual(8192)
     expect(Array.from(bounded.value).every((character) => character !== "\ud800")).toBe(true)
   })
+  test.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects unsafe file counts in domain evidence: %s",
+    (filesChanged) => {
+      const result = CommitDomain.projectCommit({
+        ...latest.commit,
+        user: latest.user,
+        message: latest.commit.headline,
+        filesChanged,
+      })
+
+      expect(Result.isFailure(result)).toBe(true)
+    },
+  )
 })

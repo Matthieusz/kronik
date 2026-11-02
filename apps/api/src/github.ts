@@ -90,6 +90,7 @@ const GraphqlCommitResponse = Schema.Struct({
   committedDate: Schema.String,
   additions: LanguageBytes,
   deletions: LanguageBytes,
+  changedFilesIfAvailable: Schema.NullOr(LanguageBytes),
   parents: Schema.Struct({
     nodes: Schema.Array(Schema.Struct({ oid: CommitSha, url: Schema.String })),
     pageInfo: PageInfoResponse,
@@ -628,7 +629,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
           )
           fields.push(`c${index}: repository(owner: $owner${index}, name: $name${index}) {
             object(oid: $sha${index}) { ... on Commit {
-              oid url message authoredDate committedDate additions deletions
+              oid url message authoredDate committedDate additions deletions changedFilesIfAvailable
               parents(first: 100, after: $after${index}) {
                 nodes { oid url } pageInfo { hasNextPage endCursor }
               }
@@ -719,6 +720,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       committedAt,
       additions: details.additions,
       deletions: details.deletions,
+      filesChanged: details.changedFilesIfAvailable,
       parents,
     } satisfies CommitDomain.Evidence
   })

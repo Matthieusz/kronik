@@ -16,6 +16,7 @@ type CommitEvidence = {
   readonly authoredAt: CommitSummary["authoredAt"]
   readonly committedAt: CommitSummary["committedAt"]
   readonly additions: number
+  readonly filesChanged: CommitSummary["filesChanged"]
   readonly deletions: number
   readonly parents: CommitSummary["parents"]
 }
@@ -112,6 +113,12 @@ const safeChangedLines = (
 export const projectCommit = (
   evidence: Evidence,
 ): Result.Result<CommitSummary, ProjectionError> => {
+  if (
+    evidence.filesChanged !== null &&
+    (!Number.isSafeInteger(evidence.filesChanged) || evidence.filesChanged < 0)
+  )
+    return Result.fail("unsafe-change-count")
+
   const changedLines = safeChangedLines(evidence.additions, evidence.deletions)
 
   if (Result.isFailure(changedLines)) return Result.fail(changedLines.failure)
@@ -132,6 +139,7 @@ export const projectCommit = (
     additions: evidence.additions,
     deletions: evidence.deletions,
     changedLines: changedLines.success,
+    filesChanged: evidence.filesChanged,
     parents: evidence.parents,
   })
 }
