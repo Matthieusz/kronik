@@ -50,28 +50,6 @@ const SearchResponse = Schema.Struct({
   items: Schema.Array(SearchCommitResponse),
 })
 
-const CommitIdentityResponse = Schema.Struct({ date: Schema.String })
-
-const CommitDetailsResponse = Schema.Struct({
-  sha: Schema.String,
-  html_url: Schema.String,
-  commit: Schema.Struct({
-    message: Schema.String,
-    author: CommitIdentityResponse,
-    committer: CommitIdentityResponse,
-  }),
-  stats: Schema.Struct({
-    additions: Schema.Number,
-    deletions: Schema.Number,
-  }),
-  parents: Schema.Array(
-    Schema.Struct({
-      sha: Schema.String,
-      html_url: Schema.String,
-    }),
-  ),
-})
-
 const LanguageBytes = Schema.Number.pipe(
   Schema.check(Schema.isInt()),
   Schema.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
@@ -82,11 +60,90 @@ const RateHeaders = Schema.Struct({
   "retry-after": Schema.optionalKey(Schema.String),
 })
 
-const LanguageResponse = Schema.Record(Schema.String, LanguageBytes)
-
-interface ContributionQuery {
+interface GraphqlQuery {
   readonly query: string
-  readonly variables: { readonly login: string; readonly from: string; readonly to: string }
+  readonly variables: Readonly<Record<string, string | null>>
+}
+
+const PageInfoResponse = Schema.Struct({
+  hasNextPage: Schema.Boolean,
+  endCursor: Schema.NullOr(Schema.String),
+})
+
+const GraphqlEnvelope = Schema.Struct({
+  data: Schema.optionalKey(Schema.Unknown),
+  errors: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        message: Schema.String,
+        type: Schema.optionalKey(Schema.String),
+      }),
+    ),
+  ),
+})
+
+const GraphqlCommitResponse = Schema.Struct({
+  oid: CommitSha,
+  url: Schema.String,
+  message: Schema.String,
+  authoredDate: Schema.String,
+  committedDate: Schema.String,
+  additions: LanguageBytes,
+  deletions: LanguageBytes,
+  parents: Schema.Struct({
+    nodes: Schema.Array(Schema.Struct({ oid: CommitSha, url: Schema.String })),
+    pageInfo: PageInfoResponse,
+  }),
+})
+
+const CommitBatchResponse = Schema.Record(
+  Schema.String,
+  Schema.NullOr(
+    Schema.Struct({
+      object: Schema.NullOr(GraphqlCommitResponse),
+    }),
+  ),
+)
+
+const LanguageBatchResponse = Schema.Record(
+  Schema.String,
+  Schema.NullOr(
+    Schema.Struct({
+      languages: Schema.NullOr(
+        Schema.Struct({
+          edges: Schema.Array(
+            Schema.Struct({ size: LanguageBytes, node: Schema.Struct({ name: Schema.String }) }),
+          ),
+          pageInfo: PageInfoResponse,
+        }),
+      ),
+    }),
+  ),
+)
+
+/** Bound query complexity independently of the number of selected commits. */
+const GraphqlBatchSize = 20
+
+/** Fail explicitly rather than return truncated parent or language connections. */
+const MaximumConnectionPages = 10
+
+const repositoryParts = (nameWithOwner: string) => {
+  const parts = nameWithOwner.split("/")
+  const owner = parts[0]
+  const name = parts[1]
+
+  if (parts.length !== 2 || !owner || !name) return undefined
+
+  return { owner, name }
+}
+
+const nextCursor = (page: typeof PageInfoResponse.Type, previous: string | null) => {
+  if (!page.hasNextPage) return Effect.succeed(null)
+
+  if (page.endCursor === null || page.endCursor === previous)
+    return Effect.fail(invalidUpstream("GitHub returned unusable pagination"))
+
+  return Effect.succeed(page.endCursor)
 }
 
 const ContributionDayResponse = Schema.Struct({
@@ -99,16 +156,13 @@ const ContributionCalendarResponse = Schema.Struct({
 })
 
 const ContributionGraphqlResponse = Schema.Struct({
-  data: Schema.Struct({
-    user: Schema.NullOr(
-      Schema.Struct({
-        contributionsCollection: Schema.Struct({
-          contributionCalendar: ContributionCalendarResponse,
-        }),
+  user: Schema.NullOr(
+    Schema.Struct({
+      contributionsCollection: Schema.Struct({
+        contributionCalendar: ContributionCalendarResponse,
       }),
-    ),
-  }),
-  errors: Schema.optionalKey(Schema.Array(Schema.Struct({ message: Schema.String }))),
+    }),
+  ),
 })
 
 const ContributionCount = Schema.Number.pipe(
@@ -116,15 +170,7 @@ const ContributionCount = Schema.Number.pipe(
   Schema.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
 )
 
-/** Keep independent commit-hydration requests bounded for the shared GitHub budget. */
-const CommitHydrationConcurrency = 8
-
-/** Keep independent repository-language requests bounded for the shared GitHub budget. */
-const LanguageConcurrency = 4
-
 type SearchResponse = typeof SearchResponse.Type
-
-type CommitDetailsResponse = typeof CommitDetailsResponse.Type
 
 /** The semantic page request passed from the coordinator to the GitHub adapter. */
 export interface CommitPageInput {
@@ -294,7 +340,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
   const request = Effect.fn("GitHub.request")(function* (
     operation: Observability.GitHubOperation,
     path: string,
-    body?: ContributionQuery,
+    body?: GraphqlQuery,
   ) {
     const token = configuration.githubToken
 
@@ -423,7 +469,7 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     operation: Observability.GitHubOperation,
     path: string,
     schema: S,
-    body?: ContributionQuery,
+    body?: GraphqlQuery,
   ) =>
     request(operation, path, body).pipe(
       Effect.retry({
@@ -437,6 +483,35 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       }),
       Effect.flatMap((response) => decodeResponse(schema)(response, operation)),
     )
+
+  const requestGraphql = <S extends Schema.Constraint & { readonly DecodingServices: never }>(
+    operation: Observability.GitHubOperation,
+    query: GraphqlQuery,
+    schema: S,
+  ) =>
+    Effect.gen(function* () {
+      const envelope = yield* requestJson(operation, "/graphql", GraphqlEnvelope, query).pipe(
+        Effect.mapError((failure) =>
+          failure instanceof ProviderFailure ? classifyProviderFailure(failure) : failure,
+        ),
+      )
+
+      if (envelope.errors !== undefined && envelope.errors.length > 0) {
+        if (envelope.errors.some((error) => error.type === "FORBIDDEN"))
+          return yield* Effect.fail(new CredentialRejected({}))
+
+        if (envelope.errors.some((error) => error.type === "RATE_LIMITED"))
+          return yield* Effect.fail(
+            classifyProviderFailure(new ProviderFailure({ operation, kind: "rate" })),
+          )
+
+        return yield* Effect.fail(invalidUpstream("GitHub returned GraphQL errors"))
+      }
+
+      return yield* Schema.decodeUnknownEffect(schema)(envelope.data).pipe(
+        Effect.mapError(() => invalidUpstream("GitHub returned malformed GraphQL data")),
+      )
+    }).pipe(Effect.withSpan("GitHub.requestGraphql"))
 
   const resolveUser = Effect.fn("GitHub.resolveUser")(function* (username: GitHubUsername) {
     const response = yield* requestJson(
@@ -489,7 +564,9 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     if (window !== undefined) {
       qualifiers.push(`committer-date:${window.from}..${window.to}`)
     }
-    if (window === undefined && snapshot !== undefined) qualifiers.push(`committer-date:<=${snapshot}`)
+
+    if (window === undefined && snapshot !== undefined)
+      qualifiers.push(`committer-date:<=${snapshot}`)
     const query = encodeURIComponent(qualifiers.join(" "))
 
     return yield* requestJson(
@@ -503,45 +580,107 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     )
   })
 
-  const hydrateCommit = Effect.fn("GitHub.hydrateCommit")(function* (
-    item: SearchResponse["items"][number],
+  const hydrateCommits = Effect.fn("GitHub.hydrateCommits")(function* (
+    items: ReadonlyArray<SearchResponse["items"][number]>,
   ) {
-    const parts = item.repository.full_name.split("/")
-    const owner = parts[0]
-    const name = parts[1]
+    const hydrated: Array<{
+      readonly sha: CommitSha
+      readonly details: typeof GraphqlCommitResponse.Type
+      readonly repository: SearchResponse["items"][number]["repository"]
+    }> = []
 
-    if (
-      parts.length !== 2 ||
-      owner === undefined ||
-      name === undefined ||
-      owner.length === 0 ||
-      name.length === 0
-    ) {
-      return yield* Effect.fail(invalidUpstream("GitHub returned an unrepresentable repository"))
+    for (let offset = 0; offset < items.length; offset += GraphqlBatchSize) {
+      const batch = items.slice(offset, offset + GraphqlBatchSize)
+      const cursors = new Map<number, string | null>()
+      const parents = new Map<number, Array<{ oid: CommitSha; url: string }>>()
+      const completed = new Map<number, (typeof hydrated)[number]>()
+
+      for (let page = 0; completed.size < batch.length; page += 1) {
+        if (page >= MaximumConnectionPages)
+          return yield* Effect.fail(
+            invalidUpstream("GitHub commit parents exceeded the page bound"),
+          )
+        const variables: Record<string, string | null> = {}
+        const declarations: string[] = []
+        const fields: string[] = []
+
+        for (const [index, item] of batch.entries()) {
+          if (completed.has(index)) continue
+          const parts = repositoryParts(item.repository.full_name)
+
+          if (parts === undefined)
+            return yield* Effect.fail(
+              invalidUpstream("GitHub returned an unrepresentable repository"),
+            )
+
+          const sha = yield* Schema.decodeUnknownEffect(CommitSha)(item.sha).pipe(
+            Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable commit SHA")),
+          )
+
+          Object.assign(variables, {
+            [`owner${index}`]: parts.owner,
+            [`name${index}`]: parts.name,
+            [`sha${index}`]: sha,
+            [`after${index}`]: cursors.get(index) ?? null,
+          })
+          declarations.push(
+            `$owner${index}: String!, $name${index}: String!, $sha${index}: GitObjectID!, $after${index}: String`,
+          )
+          fields.push(`c${index}: repository(owner: $owner${index}, name: $name${index}) {
+            object(oid: $sha${index}) { ... on Commit {
+              oid url message authoredDate committedDate additions deletions
+              parents(first: 100, after: $after${index}) {
+                nodes { oid url } pageInfo { hasNextPage endCursor }
+              }
+            } }
+          }`)
+        }
+
+        const response = yield* requestGraphql(
+          "GitHub.hydrateCommit",
+          {
+            query: `query CommitBatch(${declarations.join(", ")}) { ${fields.join("\n")} }`,
+            variables,
+          },
+          CommitBatchResponse,
+        )
+
+        for (const [index, item] of batch.entries()) {
+          if (completed.has(index)) continue
+          const commit = response[`c${index}`]?.object
+
+          if (commit === undefined || commit === null || commit.oid !== item.sha)
+            return yield* Effect.fail(invalidUpstream("GitHub omitted a requested commit"))
+          const allParents = parents.get(index) ?? []
+          allParents.push(...commit.parents.nodes)
+          parents.set(index, allParents)
+          const cursor = yield* nextCursor(commit.parents.pageInfo, cursors.get(index) ?? null)
+          cursors.set(index, cursor)
+
+          if (cursor !== null) continue
+          completed.set(index, {
+            sha: commit.oid,
+            repository: item.repository,
+            details: { ...commit, parents: { ...commit.parents, nodes: allParents } },
+          })
+        }
+      }
+
+      for (const index of batch.keys()) {
+        const commit = completed.get(index)
+
+        if (commit !== undefined) hydrated.push(commit)
+      }
     }
 
-    const sha = yield* Schema.decodeUnknownEffect(CommitSha)(item.sha).pipe(
-      Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable commit SHA")),
-    )
-
-    const details = yield* requestJson(
-      "GitHub.hydrateCommit",
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${encodeURIComponent(sha)}`,
-      CommitDetailsResponse,
-    ).pipe(
-      Effect.mapError((failure) =>
-        failure instanceof ProviderFailure ? classifyProviderFailure(failure) : failure,
-      ),
-    )
-
-    return { sha, details, repository: item.repository }
+    return hydrated
   })
 
   const toEvidence = Effect.fn("GitHub.toEvidence")(function* (
     user: User,
     hydrated: {
       readonly sha: CommitDomain.Evidence["sha"]
-      readonly details: CommitDetailsResponse
+      readonly details: typeof GraphqlCommitResponse.Type
       readonly repository: SearchResponse["items"][number]["repository"]
     },
   ) {
@@ -552,74 +691,114 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       url: hydrated.repository.html_url,
     }).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable repository")))
 
-    const parents = yield* Effect.forEach(details.parents, (parent) =>
-      Schema.decodeUnknownEffect(CommitParent)({ sha: parent.sha, url: parent.html_url }).pipe(
+    const parents = yield* Effect.forEach(details.parents.nodes, (parent) =>
+      Schema.decodeUnknownEffect(CommitParent)({ sha: parent.oid, url: parent.url }).pipe(
         Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable parent")),
       ),
     )
 
-    const authoredAt = yield* Schema.decodeUnknownEffect(IsoTimestamp)(
-      details.commit.author.date,
-    ).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an invalid author timestamp")))
+    const authoredAt = yield* Schema.decodeUnknownEffect(IsoTimestamp)(details.authoredDate).pipe(
+      Effect.mapError(() => invalidUpstream("GitHub returned an invalid author timestamp")),
+    )
 
-    const committedAt = yield* Schema.decodeUnknownEffect(IsoTimestamp)(
-      details.commit.committer.date,
-    ).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an invalid committer timestamp")))
+    const committedAt = yield* Schema.decodeUnknownEffect(IsoTimestamp)(details.committedDate).pipe(
+      Effect.mapError(() => invalidUpstream("GitHub returned an invalid committer timestamp")),
+    )
 
-    const commitUrl = yield* Schema.decodeUnknownEffect(Repository.fields.url)(
-      details.html_url,
-    ).pipe(Effect.mapError(() => invalidUpstream("GitHub returned an invalid commit URL")))
+    const commitUrl = yield* Schema.decodeUnknownEffect(Repository.fields.url)(details.url).pipe(
+      Effect.mapError(() => invalidUpstream("GitHub returned an invalid commit URL")),
+    )
 
     return {
       user,
       sha: hydrated.sha,
       url: commitUrl,
       repository,
-      message: details.commit.message,
+      message: details.message,
       authoredAt,
       committedAt,
-      additions: details.stats.additions,
-      deletions: details.stats.deletions,
+      additions: details.additions,
+      deletions: details.deletions,
       parents,
     } satisfies CommitDomain.Evidence
   })
 
-  const getLanguages = Effect.fn("GitHub.getLanguages")(function* (repository: Repository) {
-    const parts = repository.nameWithOwner.split("/")
-    const owner = parts[0]
-    const name = parts[1]
+  const getLanguages = Effect.fn("GitHub.getLanguages")(function* (
+    repositories: ReadonlyArray<Repository>,
+  ) {
+    const result: ActivityDomain.RepositoryLanguages[] = []
 
-    if (
-      parts.length !== 2 ||
-      owner === undefined ||
-      name === undefined ||
-      owner.length === 0 ||
-      name.length === 0
-    ) {
-      return yield* Effect.fail(invalidUpstream("GitHub returned an unrepresentable repository"))
+    for (let offset = 0; offset < repositories.length; offset += GraphqlBatchSize) {
+      const batch = repositories.slice(offset, offset + GraphqlBatchSize)
+      const completed = new Set<number>()
+      const cursors = new Map<number, string | null>()
+      const languages = new Map<number, ActivityDomain.LanguageEvidence[]>()
+
+      for (let page = 0; completed.size < batch.length; page += 1) {
+        if (page >= MaximumConnectionPages)
+          return yield* Effect.fail(
+            invalidUpstream("GitHub repository languages exceeded the page bound"),
+          )
+        const variables: Record<string, string | null> = {}
+        const declarations: string[] = []
+        const fields: string[] = []
+
+        for (const [index, repository] of batch.entries()) {
+          if (completed.has(index)) continue
+          const parts = repositoryParts(repository.nameWithOwner)
+
+          if (parts === undefined)
+            return yield* Effect.fail(
+              invalidUpstream("GitHub returned an unrepresentable repository"),
+            )
+          Object.assign(variables, {
+            [`owner${index}`]: parts.owner,
+            [`name${index}`]: parts.name,
+            [`after${index}`]: cursors.get(index) ?? null,
+          })
+          declarations.push(
+            `$owner${index}: String!, $name${index}: String!, $after${index}: String`,
+          )
+          fields.push(`r${index}: repository(owner: $owner${index}, name: $name${index}) {
+            languages(first: 100, after: $after${index}) {
+              edges { size node { name } } pageInfo { hasNextPage endCursor }
+            }
+          }`)
+        }
+
+        const response = yield* requestGraphql(
+          "GitHub.getLanguages",
+          {
+            query: `query LanguageBatch(${declarations.join(", ")}) { ${fields.join("\n")} }`,
+            variables,
+          },
+          LanguageBatchResponse,
+        )
+
+        for (const [index, repository] of batch.entries()) {
+          if (completed.has(index)) continue
+          const connection = response[`r${index}`]?.languages
+
+          if (connection === undefined || connection === null)
+            return yield* Effect.fail(
+              invalidUpstream("GitHub omitted requested repository languages"),
+            )
+          const allLanguages = languages.get(index) ?? []
+          allLanguages.push(
+            ...connection.edges.map((edge) => ({ name: edge.node.name, bytes: edge.size })),
+          )
+          languages.set(index, allLanguages)
+          const cursor = yield* nextCursor(connection.pageInfo, cursors.get(index) ?? null)
+          cursors.set(index, cursor)
+
+          if (cursor !== null) continue
+          completed.add(index)
+          result.push({ nameWithOwner: repository.nameWithOwner, languages: allLanguages })
+        }
+      }
     }
 
-    const response = yield* requestJson(
-      "GitHub.getLanguages",
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/languages`,
-      LanguageResponse,
-    ).pipe(
-      Effect.catchIf(
-        (failure) => failure instanceof ProviderFailure && failure.status === 404,
-        () => Effect.succeed({}),
-      ),
-      Effect.mapError((failure) =>
-        failure instanceof ProviderFailure ? classifyProviderFailure(failure) : failure,
-      ),
-    )
-
-    return {
-      nameWithOwner: repository.nameWithOwner,
-      languages: Object.entries(response).map(([languageName, bytes]) => ({
-        name: languageName,
-        bytes,
-      })),
-    }
+    return result
   })
 
   const contributionStreak = Effect.fn("GitHub.contributionStreak")(function* (input: StreakInput) {
@@ -637,10 +816,8 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       }
     }`
 
-    const response = yield* requestJson(
+    const response = yield* requestGraphql(
       "GitHub.contributionStreak",
-      "/graphql",
-      ContributionGraphqlResponse,
       {
         query,
         variables: {
@@ -649,15 +826,10 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
           to: `${input.to}T23:59:59Z`,
         },
       },
-    ).pipe(
-      Effect.mapError((failure) =>
-        failure instanceof ProviderFailure ? classifyProviderFailure(failure) : failure,
-      ),
+      ContributionGraphqlResponse,
     )
 
-    if (response.errors !== undefined && response.errors.length > 0)
-      return yield* Effect.fail(invalidUpstream("GitHub returned GraphQL errors"))
-    const graphUser = response.data.user
+    const graphUser = response.user
 
     if (graphUser === null)
       return yield* Effect.fail(
@@ -718,8 +890,12 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       )
     }
 
-    const hydrated = yield* hydrateCommit(item)
-    const evidence = yield* toEvidence(user, hydrated)
+    const hydrated = yield* hydrateCommits([item])
+    const commit = hydrated[0]
+
+    if (commit === undefined)
+      return yield* Effect.fail(invalidUpstream("GitHub omitted the latest commit"))
+    const evidence = yield* toEvidence(user, commit)
     const projected = CommitDomain.projectLatest(evidence)
 
     if (Result.isFailure(projected)) {
@@ -749,21 +925,14 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       .filter((candidate) => candidate.author?.login.toLowerCase() === user.login.toLowerCase())
       .slice(0, 100)
 
-    const items = yield* Effect.forEach(
-      matchingItems,
-      (item) => hydrateCommit(item).pipe(Effect.flatMap((hydrated) => toEvidence(user, hydrated))),
-      { concurrency: CommitHydrationConcurrency },
-    )
+    const hydrated = yield* hydrateCommits(matchingItems)
+    const items = yield* Effect.forEach(hydrated, (commit) => toEvidence(user, commit))
 
     const repositories = new Map<string, Repository>()
 
     for (const item of items) repositories.set(item.repository.nameWithOwner, item.repository)
 
-    const repositoryLanguages = yield* Effect.forEach(
-      [...repositories.values()],
-      (repository) => getLanguages(repository),
-      { concurrency: LanguageConcurrency },
-    )
+    const repositoryLanguages = yield* getLanguages([...repositories.values()])
 
     const totalCount = search.total_count ?? matchingItems.length
 
@@ -799,11 +968,8 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
       (candidate) => candidate.author?.login.toLowerCase() === user.login.toLowerCase(),
     )
 
-    const items = yield* Effect.forEach(
-      matchingItems,
-      (item) => hydrateCommit(item).pipe(Effect.flatMap((hydrated) => toEvidence(user, hydrated))),
-      { concurrency: CommitHydrationConcurrency },
-    )
+    const hydrated = yield* hydrateCommits(matchingItems)
+    const items = yield* Effect.forEach(hydrated, (commit) => toEvidence(user, commit))
 
     const totalCount = search.total_count ?? search.items.length
 

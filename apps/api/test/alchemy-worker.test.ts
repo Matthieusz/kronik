@@ -1,7 +1,8 @@
 import { expect } from "bun:test"
 import { providers } from "@alchemy.run/cloudflare"
 import { make } from "alchemy/Test/Bun"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { batchFixture, commitFixture, GraphqlRequest } from "./support/github-graphql.js"
 import KronikRuntimeVerification from "./alchemy-runtime.fixture.js"
 
 const sha = "0123456789abcdef0123456789abcdef01234567"
@@ -14,7 +15,7 @@ let fakeGitHubRequests = 0
 const fakeGitHub = Bun.serve({
   hostname: "127.0.0.1",
   port: 43119,
-  fetch(request) {
+  async fetch(request) {
     fakeGitHubRequests += 1
     const url = new URL(request.url)
 
@@ -42,22 +43,19 @@ const fakeGitHub = Bun.serve({
         ],
       })
 
-    if (url.pathname === `/repos/owner/repo/commits/${sha}`)
-      return Response.json({
-        sha,
-        html_url: `https://github.com/owner/repo/commit/${sha}`,
-        repository: {
-          full_name: "owner/repo",
-          html_url: "https://github.com/owner/repo",
-        },
-        commit: {
-          message: "Initialized Worker integration",
-          author: { date: "2026-01-01T10:00:00Z" },
-          committer: { date: "2026-01-01T11:00:00Z" },
-        },
-        stats: { additions: 3, deletions: 1 },
-        parents: [],
-      })
+    if (url.pathname === "/graphql") {
+      const query = Schema.decodeUnknownSync(GraphqlRequest)(await request.json())
+
+      const body = batchFixture(query, (requestedSha, repository) => ({
+        ...commitFixture(requestedSha, repository),
+        message: "Initialized Worker integration",
+        authoredDate: "2026-01-01T10:00:00Z",
+        committedDate: "2026-01-01T11:00:00Z",
+        parents: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+      }))
+
+      if (body !== undefined) return Response.json(body)
+    }
 
     return Response.json({ message: "Not Found" }, { status: 404 })
   },
@@ -97,6 +95,20 @@ test(
     expect(response.status).toBe(200)
     expect(body).toMatchObject({ user: { login: username } })
     expect(fakeGitHubRequests).toBe(3)
+
+    const activityUrl = yield* workerUrl(
+      `/v1/users/${username}/activity?from=2026-01-01&to=2026-01-30`,
+    )
+
+    const activity = yield* Effect.promise(() =>
+      fetch(activityUrl, { headers: { "cf-connecting-ip": "192.0.2.1" } }),
+    )
+
+    const summary = yield* Effect.promise(() => activity.json())
+
+    expect(activity.status).toBe(200)
+    expect(summary).toMatchObject({ user: { login: username } })
+    expect(fakeGitHubRequests).toBe(7)
   }),
   { timeout: 120_000 },
 )

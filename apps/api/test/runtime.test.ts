@@ -1,3 +1,4 @@
+import { batchFixture, commitFixture, readGraphqlRequest } from "./support/github-graphql.js"
 // Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
 /* oxlint-disable effecttsgo/unstable-api-usage */
 
@@ -220,6 +221,18 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
     }
 
     if (pathname === "/graphql") {
+      const batch = batchFixture(readGraphqlRequest(request), (detailSha, repository) => ({
+        ...commitFixture(detailSha, repository),
+        message: "Runtime integration commit\n\nDetails",
+        authoredDate: "2026-01-01T10:00:00Z",
+        committedDate:
+          detailSha === introducedSha ? "2026-01-01T11:30:00Z" : "2026-01-01T11:00:00Z",
+      }))
+
+      if (batch !== undefined)
+        return Effect.succeed(
+          httpClientResponseFromWeb(request, new Response(JSON.stringify(batch), { status: 200 })),
+        )
       graphql += 1
 
       const calendar =
@@ -248,43 +261,7 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
       )
     }
 
-    if (pathname.endsWith("/languages"))
-      return Effect.succeed(
-        httpClientResponseFromWeb(
-          request,
-          new Response(JSON.stringify({ TypeScript: 100, JavaScript: 50 }), { status: 200 }),
-        ),
-      )
-    const detailSha = url.pathname.endsWith(introducedSha) ? introducedSha : sha
-
-    const committedAt =
-      detailSha === introducedSha ? "2026-01-01T11:30:00Z" : "2026-01-01T11:00:00Z"
-
-    return Effect.succeed(
-      httpClientResponseFromWeb(
-        request,
-        new Response(
-          JSON.stringify({
-            sha: detailSha,
-            html_url: `https://github.com/owner/repo/commit/${detailSha}`,
-            repository: {
-              full_name: "owner/repo",
-              html_url: "https://github.com/owner/repo",
-            },
-            commit: {
-              message: "Runtime integration commit\n\nDetails",
-              author: { date: "2026-01-01T10:00:00Z" },
-              committer: { date: committedAt },
-            },
-            stats: { additions: 3, deletions: 1 },
-            parents: [
-              { sha: detailSha, html_url: `https://github.com/owner/repo/commit/${detailSha}` },
-            ],
-          }),
-          { status: 200 },
-        ),
-      ),
-    )
+    throw new Error(`Unexpected GitHub request: ${pathname}`)
   })
 
   return {
@@ -1178,7 +1155,11 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
             ...baseGitHub,
             client: HttpClient.make((request, url) =>
               Effect.gen(function* () {
-                if (refreshing && url.pathname.includes("/commits/")) {
+                if (
+                  refreshing &&
+                  url.pathname === "/graphql" &&
+                  readGraphqlRequest(request).query.includes("query CommitBatch")
+                ) {
                   yield* Deferred.succeed(refreshStarted, undefined)
                   yield* Deferred.await(allowRefresh)
                 }

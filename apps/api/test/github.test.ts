@@ -13,6 +13,8 @@ import { CommitSha, GitHubUsername, IsoDate, IsoTimestamp } from "@kronik/contra
 import { Effect, Layer, Option, Redacted, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 
+import { batchFixture, readGraphqlRequest } from "./support/github-graphql.js"
+
 const sha = "0123456789abcdef0123456789abcdef01234567"
 
 const snapshot = Schema.decodeUnknownSync(IsoTimestamp)("2026-01-02T04:00:00Z")
@@ -92,33 +94,17 @@ const responseFor = (pathname: string) => {
     }
   }
 
-  if (pathname.endsWith("/languages")) {
-    return { status: 200, body: { TypeScript: 100, JavaScript: 50 } }
-  }
-
-  return {
-    status: 200,
-    body: {
-      sha,
-      html_url: `https://github.com/owner/repo/commit/${sha}`,
-      commit: {
-        message: "Implement latest\n\nWith details",
-        author: { date: "2026-01-02T03:04:05Z" },
-        committer: { date: "2026-01-02T03:05:06Z" },
-      },
-      stats: { additions: 3, deletions: 1 },
-      parents: [{ sha, html_url: `https://github.com/owner/repo/commit/${sha}` }],
-    },
-  }
+  throw new Error(`Unexpected GitHub request: ${pathname}`)
 }
 
 const fakeClient = HttpClient.make((request, url) => {
   const fixture = responseFor(url.pathname)
+  const batch = url.pathname === "/graphql" ? batchFixture(readGraphqlRequest(request)) : undefined
 
   return Effect.succeed(
     HttpClientResponse.fromWeb(
       request,
-      new Response(JSON.stringify(fixture.body), {
+      new Response(JSON.stringify(batch ?? fixture.body), {
         status: fixture.status,
         headers: {
           "content-type": "application/json",
@@ -137,100 +123,8 @@ const configuration = {
   githubUserAgent: "kronik-test",
 }
 
-const concurrencyClient = (() => {
-  let active = 0
-  let maximum = 0
-  let hydrationActive = 0
-  let hydrationMaximum = 0
-  let languageCalls = 0
-
-  const client = HttpClient.make((request, url) => {
-    const response = (body: Schema.Json) =>
-      HttpClientResponse.fromWeb(
-        request,
-        new Response(JSON.stringify(body), {
-          status: 200,
-          headers: { "content-type": "application/json", "x-ratelimit-remaining": "4999" },
-        }),
-      )
-
-    if (url.pathname === "/users/MixedUser")
-      return Effect.succeed(
-        response({
-          login: "MixedUser",
-          html_url: "https://github.com/MixedUser",
-          avatar_url: "https://avatars.githubusercontent.com/u/1",
-        }),
-      )
-
-    if (url.pathname === "/search/commits")
-      return Effect.succeed(
-        response({
-          total_count: 25,
-          incomplete_results: false,
-          items: Array.from({ length: 25 }, (_, index) => ({
-            sha,
-            html_url: `https://github.com/owner/repo-${index}/commit/${sha}`,
-            repository: {
-              full_name: `owner/repo-${index}`,
-              html_url: `https://github.com/owner/repo-${index}`,
-            },
-            author: { login: "MixedUser" },
-          })),
-        }),
-      )
-
-    if (url.pathname.endsWith("/languages")) {
-      languageCalls += 1
-      active += 1
-      maximum = Math.max(maximum, active)
-
-      return Effect.promise(() =>
-        Promise.resolve().then(() => {
-          active -= 1
-
-          return response({ TypeScript: 100, JavaScript: 50 })
-        }),
-      )
-    }
-
-    const repository = url.pathname.split("/")[3]
-    hydrationActive += 1
-    hydrationMaximum = Math.max(hydrationMaximum, hydrationActive)
-
-    return Effect.promise(() =>
-      Promise.resolve().then(() => {
-        hydrationActive -= 1
-
-        return response({
-          sha,
-          html_url: `https://github.com/owner/${repository}/commit/${sha}`,
-          repository: {
-            full_name: `owner/${repository}`,
-            html_url: `https://github.com/owner/${repository}`,
-          },
-          commit: {
-            message: "Commit",
-            author: { date: "2026-01-02T03:04:05Z" },
-            committer: { date: "2026-01-02T03:05:06Z" },
-          },
-          stats: { additions: 3, deletions: 1 },
-          parents: [],
-        })
-      }),
-    )
-  })
-
-  return {
-    client,
-    maximum: () => maximum,
-    hydrationMaximum: () => hydrationMaximum,
-    languageCalls: () => languageCalls,
-  }
-})()
-
 describe("GitHub adapter", () => {
-  test("accepts GitHub commit details without a repository object", async () => {
+  test("hydrates a commit through GraphQL without a REST details request", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const github = yield* GitHub.Service
@@ -305,10 +199,13 @@ describe("GitHub adapter", () => {
       if (url.pathname === "/search/commits") queries.push(url.searchParams.get("q") ?? "")
       const fixture = responseFor(url.pathname)
 
+      const batch =
+        url.pathname === "/graphql" ? batchFixture(readGraphqlRequest(request)) : undefined
+
       return Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
-          new Response(JSON.stringify(fixture.body), {
+          new Response(JSON.stringify(batch ?? fixture.body), {
             status: fixture.status,
             headers: { "content-type": "application/json" },
           }),
@@ -363,32 +260,6 @@ describe("GitHub adapter", () => {
         ],
       },
     ])
-  })
-
-  test("bounds independent repository-language lookups and overlaps commit hydration", async () => {
-    const result = await Effect.runPromise(
-      Effect.gen(function* () {
-        const github = yield* GitHub.Service
-
-        return yield* github.activity({
-          username,
-          from: activityFrom,
-          to: activityTo,
-        })
-      }).pipe(
-        Effect.provide(
-          GitHub.layerWithClient(concurrencyClient.client).pipe(
-            Layer.provide(Layer.succeed(Configuration, configuration)),
-          ),
-        ),
-      ),
-    )
-
-    expect(result.repositories).toHaveLength(25)
-    expect(concurrencyClient.languageCalls()).toBe(25)
-    expect(concurrencyClient.maximum()).toBeLessThanOrEqual(4)
-    expect(concurrencyClient.hydrationMaximum()).toBeGreaterThan(1)
-    expect(concurrencyClient.hydrationMaximum()).toBeLessThanOrEqual(8)
   })
 
   test("reads a bounded contribution calendar through GraphQL", async () => {
