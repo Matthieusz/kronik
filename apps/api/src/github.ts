@@ -487,9 +487,9 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
     const qualifiers = [`author:${user.login}`]
 
     if (window !== undefined) {
-      qualifiers.push(`committer-date:>=${window.from}`)
-      qualifiers.push(`committer-date:<=${window.to}`)
-    } else if (snapshot !== undefined) qualifiers.push(`committer-date:<=${snapshot}`)
+      qualifiers.push(`committer-date:${window.from}..${window.to}`)
+    }
+    if (window === undefined && snapshot !== undefined) qualifiers.push(`committer-date:<=${snapshot}`)
     const query = encodeURIComponent(qualifiers.join(" "))
 
     return yield* requestJson(

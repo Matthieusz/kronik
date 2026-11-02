@@ -298,6 +298,41 @@ describe("GitHub adapter", () => {
     expect(result.items).toHaveLength(1)
   })
 
+  test("sends one inclusive date range qualifier for activity searches", async () => {
+    const queries: string[] = []
+
+    const client = HttpClient.make((request, url) => {
+      if (url.pathname === "/search/commits") queries.push(url.searchParams.get("q") ?? "")
+      const fixture = responseFor(url.pathname)
+
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(JSON.stringify(fixture.body), {
+            status: fixture.status,
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      )
+    })
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const github = yield* GitHub.Service
+
+        return yield* github.activity({ username, from: activityFrom, to: activityTo })
+      }).pipe(
+        Effect.provide(
+          GitHub.layerWithClient(client).pipe(
+            Layer.provide(Layer.succeed(Configuration, configuration)),
+          ),
+        ),
+      ),
+    )
+
+    expect(queries).toEqual(["author:MixedUser committer-date:2026-01-01..2026-01-30"])
+  })
+
   test("aggregates bounded commits and repository languages", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
