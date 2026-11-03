@@ -125,6 +125,8 @@ const LanguageBatchResponse = Schema.Record(
 /** Bound query complexity independently of the number of selected commits. */
 const GraphqlBatchSize = 20
 
+const HydrationConcurrency = 3
+
 /** Fail explicitly rather than return truncated parent or language connections. */
 const MaximumConnectionPages = 10
 
@@ -584,50 +586,59 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
   const hydrateCommits = Effect.fn("GitHub.hydrateCommits")(function* (
     items: ReadonlyArray<SearchResponse["items"][number]>,
   ) {
-    const hydrated: Array<{
-      readonly sha: CommitSha
-      readonly details: typeof GraphqlCommitResponse.Type
-      readonly repository: SearchResponse["items"][number]["repository"]
-    }> = []
+    const batches = Array.from({ length: Math.ceil(items.length / GraphqlBatchSize) }, (_, index) =>
+      items.slice(index * GraphqlBatchSize, (index + 1) * GraphqlBatchSize),
+    )
 
-    for (let offset = 0; offset < items.length; offset += GraphqlBatchSize) {
-      const batch = items.slice(offset, offset + GraphqlBatchSize)
-      const cursors = new Map<number, string | null>()
-      const parents = new Map<number, Array<{ oid: CommitSha; url: string }>>()
-      const completed = new Map<number, (typeof hydrated)[number]>()
+    const hydrated = yield* Effect.forEach(
+      batches,
+      Effect.fn("GitHub.hydrateBatch")(function* (batch) {
+        const cursors = new Map<number, string | null>()
+        const parents = new Map<number, Array<{ oid: CommitSha; url: string }>>()
 
-      for (let page = 0; completed.size < batch.length; page += 1) {
-        if (page >= MaximumConnectionPages)
-          return yield* Effect.fail(
-            invalidUpstream("GitHub commit parents exceeded the page bound"),
-          )
-        const variables: Record<string, string | null> = {}
-        const declarations: string[] = []
-        const fields: string[] = []
+        const completed = new Map<
+          number,
+          {
+            readonly sha: CommitSha
+            readonly details: typeof GraphqlCommitResponse.Type
+            readonly repository: SearchResponse["items"][number]["repository"]
+          }
+        >()
 
-        for (const [index, item] of batch.entries()) {
-          if (completed.has(index)) continue
-          const parts = repositoryParts(item.repository.full_name)
-
-          if (parts === undefined)
+        for (let page = 0; completed.size < batch.length; page += 1) {
+          if (page >= MaximumConnectionPages)
             return yield* Effect.fail(
-              invalidUpstream("GitHub returned an unrepresentable repository"),
+              invalidUpstream("GitHub commit parents exceeded the page bound"),
+            )
+          const variables: Record<string, string | null> = {}
+          const declarations: string[] = []
+          const fields: string[] = []
+
+          for (const [index, item] of batch.entries()) {
+            if (completed.has(index)) continue
+            const parts = repositoryParts(item.repository.full_name)
+
+            if (parts === undefined)
+              return yield* Effect.fail(
+                invalidUpstream("GitHub returned an unrepresentable repository"),
+              )
+
+            const sha = yield* Schema.decodeUnknownEffect(CommitSha)(item.sha).pipe(
+              Effect.mapError(() =>
+                invalidUpstream("GitHub returned an unrepresentable commit SHA"),
+              ),
             )
 
-          const sha = yield* Schema.decodeUnknownEffect(CommitSha)(item.sha).pipe(
-            Effect.mapError(() => invalidUpstream("GitHub returned an unrepresentable commit SHA")),
-          )
-
-          Object.assign(variables, {
-            [`owner${index}`]: parts.owner,
-            [`name${index}`]: parts.name,
-            [`sha${index}`]: sha,
-            [`after${index}`]: cursors.get(index) ?? null,
-          })
-          declarations.push(
-            `$owner${index}: String!, $name${index}: String!, $sha${index}: GitObjectID!, $after${index}: String`,
-          )
-          fields.push(`c${index}: repository(owner: $owner${index}, name: $name${index}) {
+            Object.assign(variables, {
+              [`owner${index}`]: parts.owner,
+              [`name${index}`]: parts.name,
+              [`sha${index}`]: sha,
+              [`after${index}`]: cursors.get(index) ?? null,
+            })
+            declarations.push(
+              `$owner${index}: String!, $name${index}: String!, $sha${index}: GitObjectID!, $after${index}: String`,
+            )
+            fields.push(`c${index}: repository(owner: $owner${index}, name: $name${index}) {
             object(oid: $sha${index}) { ... on Commit {
               oid url message authoredDate committedDate additions deletions changedFilesIfAvailable
               parents(first: 100, after: $after${index}) {
@@ -635,46 +646,52 @@ const makeClient = Effect.fn("GitHub.makeClient")(function* (observability: Obse
               }
             } }
           }`)
+          }
+
+          const response = yield* requestGraphql(
+            "GitHub.hydrateCommit",
+            {
+              query: `query CommitBatch(${declarations.join(", ")}) { ${fields.join("\n")} }`,
+              variables,
+            },
+            CommitBatchResponse,
+          )
+
+          for (const [index, item] of batch.entries()) {
+            if (completed.has(index)) continue
+            const commit = response[`c${index}`]?.object
+
+            if (commit === undefined || commit === null || commit.oid !== item.sha)
+              return yield* Effect.fail(invalidUpstream("GitHub omitted a requested commit"))
+            const allParents = parents.get(index) ?? []
+            allParents.push(...commit.parents.nodes)
+            parents.set(index, allParents)
+            const cursor = yield* nextCursor(commit.parents.pageInfo, cursors.get(index) ?? null)
+            cursors.set(index, cursor)
+
+            if (cursor !== null) continue
+            completed.set(index, {
+              sha: commit.oid,
+              repository: item.repository,
+              details: { ...commit, parents: { ...commit.parents, nodes: allParents } },
+            })
+          }
         }
 
-        const response = yield* requestGraphql(
-          "GitHub.hydrateCommit",
-          {
-            query: `query CommitBatch(${declarations.join(", ")}) { ${fields.join("\n")} }`,
-            variables,
-          },
-          CommitBatchResponse,
-        )
+        const ordered = []
 
-        for (const [index, item] of batch.entries()) {
-          if (completed.has(index)) continue
-          const commit = response[`c${index}`]?.object
+        for (const index of batch.keys()) {
+          const commit = completed.get(index)
 
-          if (commit === undefined || commit === null || commit.oid !== item.sha)
-            return yield* Effect.fail(invalidUpstream("GitHub omitted a requested commit"))
-          const allParents = parents.get(index) ?? []
-          allParents.push(...commit.parents.nodes)
-          parents.set(index, allParents)
-          const cursor = yield* nextCursor(commit.parents.pageInfo, cursors.get(index) ?? null)
-          cursors.set(index, cursor)
-
-          if (cursor !== null) continue
-          completed.set(index, {
-            sha: commit.oid,
-            repository: item.repository,
-            details: { ...commit, parents: { ...commit.parents, nodes: allParents } },
-          })
+          if (commit !== undefined) ordered.push(commit)
         }
-      }
 
-      for (const index of batch.keys()) {
-        const commit = completed.get(index)
+        return ordered
+      }),
+      { concurrency: HydrationConcurrency },
+    )
 
-        if (commit !== undefined) hydrated.push(commit)
-      }
-    }
-
-    return hydrated
+    return hydrated.flat()
   })
 
   const toEvidence = Effect.fn("GitHub.toEvidence")(function* (

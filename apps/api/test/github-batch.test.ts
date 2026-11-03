@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test"
 import { ApiError } from "@kronik/contract/errors"
 import { CommitSha, GitHubUsername, IsoDate, IsoTimestamp } from "@kronik/contract/model"
-import { Effect, Layer, Option, Redacted, Result, Schema } from "effect"
+import { Deferred, Effect, Layer, Option, Redacted, Result, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Configuration } from "../src/config.js"
 import { GitHub } from "../src/github.js"
@@ -35,6 +35,7 @@ const makeFixture = (
     readonly count?: number
     readonly repositories?: number
     readonly modify?: (request: GraphqlRequest, body: Schema.Json) => Schema.Json
+    readonly beforeResponse?: (request: GraphqlRequest) => Effect.Effect<void>
   } = {},
 ) => {
   const calls: string[] = []
@@ -85,7 +86,9 @@ const makeFixture = (
 
     if (body === undefined) throw new Error("Unexpected GraphQL operation")
 
-    return response(options.modify === undefined ? body : options.modify(query, body))
+    return (options.beforeResponse?.(query) ?? Effect.void).pipe(
+      Effect.andThen(response(options.modify === undefined ? body : options.modify(query, body))),
+    )
   })
 
   const layer = GitHub.layerWithClient(client).pipe(
@@ -144,6 +147,61 @@ describe("GitHub GraphQL batches", () => {
       { name: "TypeScript", bytes: 100 },
       { name: "JavaScript", bytes: 50 },
     ])
+  })
+  test("runs a bounded number of hydration batches concurrently and preserves order", async () => {
+    const ready = Effect.runSync(Deferred.make<void>())
+    let active = 0
+    let maximum = 0
+
+    const fixture = makeFixture({
+      repositories: 1,
+      beforeResponse: (query) => {
+        if (!query.query.includes("CommitBatch")) return Effect.void
+
+        return Effect.gen(function* () {
+          active += 1
+          maximum = Math.max(maximum, active)
+
+          if (active === 3) yield* Deferred.succeed(ready, undefined)
+          yield* Deferred.await(ready)
+          active -= 1
+        })
+      },
+    })
+
+    const result = await Effect.runPromise(fixture.activity.pipe(Effect.timeout("1 second")))
+    expect(maximum).toBe(3)
+    expect(result.items.map((item) => item.sha)).toEqual(
+      Array.from({ length: 100 }, (_, index) => shaFor(index)),
+    )
+  })
+  test("interrupts other hydration batches when a batch fails", async () => {
+    const started = Effect.runSync(Deferred.make<void>())
+    let interrupted = false
+
+    const fixture = makeFixture({
+      count: 40,
+      beforeResponse: (query) => {
+        if (!query.query.includes("CommitBatch")) return Effect.void
+
+        if (query.variables.sha0 === shaFor(0)) return Deferred.await(started)
+
+        return Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.ensuring(Effect.sync(() => (interrupted = true))),
+        )
+      },
+      modify: (query, body) =>
+        query.variables.sha0 === shaFor(0) ? { errors: [{ message: "Unavailable" }] } : body,
+    })
+
+    await expectUpstreamFailure(
+      fixture.activity.pipe(
+        Effect.timeout("1 second"),
+        Effect.catchTag("TimeoutError", (error) => Effect.die(error)),
+      ),
+    )
+    expect(interrupted).toBe(true)
   })
   test("uses batches for 100-item commit pages too", async () => {
     const fixture = makeFixture()
