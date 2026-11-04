@@ -149,7 +149,7 @@ describe("GitHub GraphQL batches", () => {
     ])
   })
   test("runs a bounded number of hydration batches concurrently and preserves order", async () => {
-    const ready = Effect.runSync(Deferred.make<void>())
+    const ready = Deferred.makeUnsafe<void>()
     let active = 0
     let maximum = 0
 
@@ -176,7 +176,7 @@ describe("GitHub GraphQL batches", () => {
     )
   })
   test("interrupts other hydration batches when a batch fails", async () => {
-    const started = Effect.runSync(Deferred.make<void>())
+    const started = Deferred.makeUnsafe<void>()
     let interrupted = false
 
     const fixture = makeFixture({
