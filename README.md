@@ -34,7 +34,9 @@ bun dev
 
 Run the full verification suite with `bun run verify`.
 Workspace typechecks use [tsrs](https://github.com/oxc-project/tsrs), patched by
-[`@effect/tsgo`](https://github.com/Effect-TS/tsgo) alongside Oxlint during `bun install`.
+[`@effect/tsgo`](https://github.com/Effect-TS/tsgo) during `bun install`.
+Oxlint runs through `effect-tsgo` with the experimental tsrs lint backend for
+its type-aware rules, including Effect rules.
 
 ### Production deployment
 

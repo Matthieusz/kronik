@@ -20,6 +20,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "2.0.0-beta.85",
     "@types/bun": "1.4.4",
     "tsrs": "catalog:"
   }
