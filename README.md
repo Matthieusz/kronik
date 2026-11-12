@@ -27,10 +27,15 @@ Built with **TypeScript**, **Effect**, **Bun**, and **Cloudflare Workers**.
 
 ```bash
 bun install
-cp .env.example .env
-# Add the required credentials to .env
+bun run setup:env
+# Add your GitHub token to .env
 bun dev
 ```
+
+`setup:env` creates `.env` with a random cursor-signing secret and does not overwrite an
+existing file. Supply `GITHUB_TOKEN` yourself; it cannot be generated locally. Keep the
+existing production `CURSOR_SECRET` across deployments: replacing it invalidates existing
+pagination cursors. Keep `.env` private and out of version control.
 
 Run the full verification suite with `bun run verify`.
 Workspace typechecks use [tsrs](https://github.com/oxc-project/tsrs), patched by

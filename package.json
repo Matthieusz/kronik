@@ -18,6 +18,7 @@
   },
   "type": "module",
   "scripts": {
+    "setup:env": "bun run tools/setup-env.ts",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "dev": "bun alchemy dev",
