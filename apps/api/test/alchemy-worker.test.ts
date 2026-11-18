@@ -7,7 +7,7 @@ import KronikRuntimeVerification from "./alchemy-runtime.fixture.js"
 
 const sha = "0123456789abcdef0123456789abcdef01234567"
 
-// Local edge-cache entries survive stack teardown; each run needs its own requested user.
+// WARNING: The local edge cache survives teardown; keep the requested user unique per run.
 const username = `Runtime${process.pid}`
 
 let fakeGitHubRequests = 0
@@ -110,7 +110,6 @@ test(
     expect(summary).toMatchObject({ user: { login: username } })
     expect(fakeGitHubRequests).toBe(7)
   }),
-  { timeout: 120_000 },
 )
 
 test(
@@ -129,5 +128,4 @@ test(
     expect(responses.filter((response) => response.status === 200)).toHaveLength(60)
     expect(responses.filter((response) => response.status === 429)).toHaveLength(1)
   }),
-  { timeout: 120_000 },
 )

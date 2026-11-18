@@ -1,5 +1,4 @@
-// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
-/* oxlint-disable effecttsgo/unstable-api-usage */
+/* oxlint-disable effecttsgo/unstable-api-usage -- Exact versions and integration tests guard unstable Effect HTTP/RPC APIs. */
 
 import { Api } from "@kronik/contract/api"
 import { ApiError } from "@kronik/contract/errors"
@@ -78,7 +77,7 @@ export interface PublicPolicyOptions {
   readonly observability?: Observability.Sink
 }
 
-const healthResponse = (): Effect.Effect<Health> => Effect.succeed({ status: "ok" })
+const healthResponse = () => Effect.succeed<Health>({ status: "ok" })
 
 const invalidRequestResponse = () =>
   HttpServerResponse.jsonUnsafe(
@@ -95,7 +94,7 @@ const invalidRequestResponse = () =>
 const activityResponse = <A extends { readonly user: { readonly login: string } }>({
   value,
   cacheState,
-}: UserActivity.LookupResult<A>): HttpServerResponse.HttpServerResponse => {
+}: UserActivity.LookupResult<A>) => {
   const headers = new Headers({ [CanonicalUsernameHeader]: value.user.login })
 
   if (cacheState === "stale") headers.set(DurableCacheStateHeader, "stale")
@@ -205,7 +204,7 @@ const buildHttpEffect = Effect.fn("Api.buildHttpEffect")(function* (
   )
 })
 
-const requestId = (request: Request, source: () => string): string => {
+const requestId = (request: Request, source: () => string) => {
   const supplied = request.headers.get("x-request-id")
 
   if (supplied !== null && RequestIdPattern.test(supplied)) return supplied
@@ -216,9 +215,9 @@ const requestId = (request: Request, source: () => string): string => {
   return crypto.randomUUID()
 }
 
-const generatedRequestId = (): string => crypto.randomUUID()
+const generatedRequestId = () => crypto.randomUUID()
 
-const cacheKey = (request: Request): Request => {
+const cacheKey = (request: Request) => {
   const url = new URL(request.url)
   const path = url.pathname.split("/")
 
@@ -238,7 +237,7 @@ const cacheKey = (request: Request): Request => {
   return new Request(url, { method: "GET" })
 }
 
-const cacheTtl = (pathname: string): number | undefined => {
+const cacheTtl = (pathname: string) => {
   if (pathname.endsWith("/commits/latest") || pathname.endsWith("/commits")) return 60
 
   if (pathname.endsWith("/activity") || pathname.endsWith("/streak")) return 300
@@ -259,7 +258,7 @@ const WorkerCacheBinding = Schema.Struct({
   caches: Schema.Struct({ default: WorkerCache }),
 })
 
-const cloudflareCache = (): Cache | undefined => {
+const cloudflareCache = () => {
   const binding = Schema.decodeUnknownOption(WorkerCacheBinding)(globalThis)
 
   return Option.isSome(binding) ? binding.value.caches.default : undefined
@@ -301,7 +300,7 @@ export const cloudflareEdgeCache: EdgeCache = {
   },
 }
 
-const publicProblem = (response: Response, id: string): Promise<Response> =>
+const publicProblem = (response: Response, id: string) =>
   response
     .clone()
     .text()
@@ -334,7 +333,7 @@ const publicProblem = (response: Response, id: string): Promise<Response> =>
       return new Response(JSON.stringify(body), { status, headers })
     })
 
-const digest = async (body: string): Promise<string> => {
+const digest = async (body: string) => {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))
 
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("")
@@ -346,7 +345,7 @@ const withPublicHeaders = async (
   state: CacheState,
   ageSeconds: number,
   request: Request,
-): Promise<Response> => {
+) => {
   const problem = await publicProblem(response, id)
   const body = await problem.clone().text()
   const headers = new Headers(problem.headers)
@@ -398,7 +397,7 @@ const withPublicHeaders = async (
   return new Response(body, { status: problem.status, headers })
 }
 
-const routeName = (pathname: string): Observability.Route => {
+const routeName = (pathname: string) => {
   if (pathname === "/health") return "health"
 
   if (pathname === "/openapi.json") return "openapi"
@@ -416,7 +415,7 @@ const routeName = (pathname: string): Observability.Route => {
   return "unmatched"
 }
 
-const canonicalUsername = (response: Response): string | undefined => {
+const canonicalUsername = (response: Response) => {
   const decoded = Schema.decodeUnknownOption(GitHubUsername)(
     response.headers.get(CanonicalUsernameHeader),
   )
@@ -436,9 +435,7 @@ const ProblemTags = new Map<string, Observability.ExpectedErrorTag>(
   } satisfies Record<string, Observability.ExpectedErrorTag>),
 )
 
-const expectedErrorTag = async (
-  response: Response,
-): Promise<Observability.ExpectedErrorTag | undefined> => {
+const expectedErrorTag = async (response: Response) => {
   let value: unknown
 
   try {
@@ -452,8 +449,8 @@ const expectedErrorTag = async (
   return Option.isSome(decoded) ? ProblemTags.get(decoded.value.type) : undefined
 }
 
-const requestAbort = (request: Request): Effect.Effect<never> =>
-  Effect.callback((resume, signal) => {
+const requestAbort = (request: Request) =>
+  Effect.callback<never>((resume, signal) => {
     const abort = () => resume(Effect.interrupt)
 
     if (request.signal.aborted) abort()
@@ -462,7 +459,7 @@ const requestAbort = (request: Request): Effect.Effect<never> =>
     return Effect.sync(() => request.signal.removeEventListener("abort", abort))
   })
 
-const rateLimitResponse = (): Response =>
+const rateLimitResponse = () =>
   new Response(
     JSON.stringify({
       type: "https://kronik.dev/problems/rate-limited",
@@ -490,16 +487,12 @@ export const makePublicResponse = async (
     HttpServerRequest.HttpServerRequest | Scope.Scope
   >,
   options: PublicPolicyOptions,
-): Promise<Response> => {
+) => {
   const startedAt = performance.now()
   const id = requestId(request, options.requestId ?? generatedRequestId)
   const route = routeName(new URL(request.url).pathname)
 
-  const finish = async (
-    response: Response,
-    state: CacheState,
-    ageSeconds: number,
-  ): Promise<Response> => {
+  const finish = async (response: Response, state: CacheState, ageSeconds: number) => {
     const username = canonicalUsername(response)
     const errorTag = await expectedErrorTag(response)
     const publicResponse = await withPublicHeaders(response, id, state, ageSeconds, request)
@@ -570,7 +563,7 @@ export const makePublicResponse = async (
         return finish(cached.response, cached.stale ? "stale" : "hit", cached.ageSeconds)
       }
     } catch {
-      // Edge cache failures are deliberately fail-open.
+      // WARNING: Cache lookup failures must not prevent fetching the canonical response.
     }
   }
 
@@ -610,7 +603,7 @@ export const makePublicResponse = async (
       if (username !== undefined) cachedResponse.headers.set(CanonicalUsernameHeader, username)
       await options.edgeCache.put(key, cachedResponse)
     } catch {
-      // Edge cache failures are deliberately fail-open.
+      // WARNING: Cache write failures must not prevent serving the canonical response.
     }
   }
 
@@ -637,7 +630,7 @@ export const makeWebHandler = Effect.fn("Api.makeWebHandler")(function* (
 })
 
 /** A deterministic in-memory edge cache useful for local acceptance tests. */
-export const makeMemoryEdgeCache = (now: () => number = Date.now): EdgeCache => {
+export const makeMemoryEdgeCache = (now: () => number = Date.now) => {
   const values = new Map<string, { readonly response: Response; readonly savedAt: number }>()
 
   return {
@@ -655,5 +648,5 @@ export const makeMemoryEdgeCache = (now: () => number = Date.now): EdgeCache => 
     put: async (request, response) => {
       values.set(request.url, { response: response.clone(), savedAt: now() })
     },
-  }
+  } satisfies EdgeCache
 }

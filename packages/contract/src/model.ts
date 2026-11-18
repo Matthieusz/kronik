@@ -16,7 +16,7 @@ const MaxSafeInteger = Number.MAX_SAFE_INTEGER
 
 const MaxUtf8Bytes = 8192
 
-const isCalendarDate = (value: string): boolean => {
+const isCalendarDate = (value: string) => {
   const match = IsoDatePattern.exec(value)
 
   if (match === null) return false
@@ -220,9 +220,9 @@ export const ActivitySummary = Schema.Struct({
 
 export interface ActivitySummary extends Schema.Schema.Type<typeof ActivitySummary> {}
 
-/** Contribution streaks evaluated over exactly the trailing 365-day GitHub calendar. */
 const StreakCount = SafeNatural.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 365 })))
 
+/** Contribution streaks evaluated over exactly the trailing 365-day GitHub calendar. */
 export const ContributionStreak = Schema.Struct({
   user: User,
   from: IsoDate,

@@ -1,5 +1,4 @@
-// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
-/* oxlint-disable effecttsgo/unstable-api-usage */
+/* oxlint-disable effecttsgo/unstable-api-usage -- Exact versions and integration tests guard unstable Effect HTTP/RPC APIs. */
 
 import { RateLimit, RateLimitBinding, type RateLimitClient, Worker } from "@alchemy.run/cloudflare"
 import { Duration, Effect, Layer, Option, Schema } from "effect"
@@ -11,16 +10,13 @@ import { activityRpcLayer } from "./activity-rpc.js"
 import { Configuration, configurationLayer } from "./config.js"
 import { Cursor } from "./cursor.js"
 import { GitHub } from "./github.js"
-// These functions build and run HTTP adapters, not contextual services.
-// oxlint-disable-next-line anti-slop-effect/no-service-constructor-imports
 import { cloudflareEdgeCache, makeHttpEffect, makePublicResponse } from "./http.js"
 import { Observability } from "./observability.js"
 import { fromWeb } from "effect/http/HttpServerResponse"
 import { HttpServerRequest, toWeb } from "effect/http/HttpServerRequest"
 import { UserActivity } from "./user-activity.js"
 
-/* SAFETY: the Cloudflare generated RateLimit client exposes unknown channels; this adapter catches all failures and parses its result. */
-/* oxlint-disable effecttsgo/any-unknown-in-error-context */
+/* oxlint-disable effecttsgo/any-unknown-in-error-context -- SAFETY: The Cloudflare RateLimit client exposes unknown channels; the adapter catches failures and decodes its result. */
 
 const RateLimitSuccess = Schema.Struct({ success: Schema.Literal(true) })
 
@@ -47,7 +43,7 @@ export const makeWorkerResponse = (
   httpEffect: Parameters<typeof makePublicResponse>[1],
   allowed: boolean,
   observability: Observability.Sink = Observability.consoleSink,
-): Promise<Response> =>
+) =>
   makePublicResponse(request, httpEffect, {
     rateLimiter: { check: async () => allowed },
     edgeCache: cloudflareEdgeCache,
@@ -118,8 +114,7 @@ export const makeKronikWorkerInitializer = (
       }),
     }
   }).pipe(
-    // The Worker initializer is the application composition root.
-    // oxlint-disable-next-line effecttsgo/strict-effect-provide
+    // oxlint-disable-next-line effecttsgo/strict-effect-provide -- The Worker initializer is the application composition root.
     Effect.provide(Layer.mergeAll(applicationRuntime, configurationRuntime, RateLimitBinding)),
   )
 }

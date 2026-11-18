@@ -29,8 +29,7 @@ export default Stack(
       docs: docs.url,
     }
   }).pipe(
-    // This stack is the production infrastructure composition root.
-    // oxlint-disable-next-line effecttsgo/strict-effect-provide
+    // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This stack is the production infrastructure composition root.
     Effect.provide(KronikApiLive),
   ),
 )

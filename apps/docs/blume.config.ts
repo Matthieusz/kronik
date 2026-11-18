@@ -15,7 +15,6 @@ export default defineConfig({
       { label: "API reference", path: "/api-reference" },
     ],
   },
-  // /api belongs to the Worker gateway; /openapi.json remains Kronik's contract.
   agents: { api: false },
   reference: [
     openapi({

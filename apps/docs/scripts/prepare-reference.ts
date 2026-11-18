@@ -1,6 +1,5 @@
 import { Config, Effect } from "effect"
 
-// This build entrypoint owns environment decoding. The contract itself stays unchanged.
 const apiUrl = Effect.runSync(
   Effect.gen(function* () {
     return yield* Config.URL("API_URL").pipe(
@@ -18,5 +17,4 @@ await Bun.write(
   }),
 )
 
-// Publish the unmodified, authoritative contract, not Blume's own docs API schema.
 await Bun.write("./public/openapi.json", Bun.file("../../packages/contract/openapi.json"))

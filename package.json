@@ -39,7 +39,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/tsgo": "0.68.1",
-    "@oxlint/plugins": "1.93.0",
+    "@interfere/landmines": "0.1.0",
     "@types/bun": "1.4.4",
     "alchemy": "catalog:",
     "effect": "catalog:",

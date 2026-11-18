@@ -27,9 +27,9 @@ export type Evidence = CommitEvidence
 /** A projection failure means upstream numeric evidence cannot be represented safely. */
 export type ProjectionError = "unsafe-change-count"
 
-const utf8Length = (value: string): number => new TextEncoder().encode(value).length
+const utf8Length = (value: string) => new TextEncoder().encode(value).length
 
-const takePrefix = (characters: ReadonlyArray<string>, budget: number): string => {
+const takePrefix = (characters: ReadonlyArray<string>, budget: number) => {
   let bytes = 0
   let result = ""
 
@@ -44,7 +44,7 @@ const takePrefix = (characters: ReadonlyArray<string>, budget: number): string =
   return result
 }
 
-const takeSuffix = (characters: ReadonlyArray<string>, budget: number): string => {
+const takeSuffix = (characters: ReadonlyArray<string>, budget: number) => {
   let bytes = 0
   let result = ""
 
@@ -86,7 +86,7 @@ export const truncateUtf8 = (value: string) => {
   return { value: result, truncated: true }
 }
 
-const splitMessage = (message: string): { readonly headline: string; readonly body: string } => {
+const splitMessage = (message: string) => {
   const newline = message.indexOf("\n")
 
   return newline < 0
@@ -94,30 +94,25 @@ const splitMessage = (message: string): { readonly headline: string; readonly bo
     : { headline: message.slice(0, newline), body: message.slice(newline + 1).replace(/^\n/, "") }
 }
 
-const safeChangedLines = (
-  additions: number,
-  deletions: number,
-): Result.Result<number, ProjectionError> => {
+const safeChangedLines = (additions: number, deletions: number) => {
   if (!Number.isSafeInteger(additions) || !Number.isSafeInteger(deletions)) {
-    return Result.fail("unsafe-change-count")
+    return Result.fail<ProjectionError>("unsafe-change-count")
   }
 
   const changedLines = additions + deletions
 
   return Number.isSafeInteger(changedLines)
     ? Result.succeed(changedLines)
-    : Result.fail("unsafe-change-count")
+    : Result.fail<ProjectionError>("unsafe-change-count")
 }
 
 /** Project GitHub evidence into the bounded public commit summary. */
-export const projectCommit = (
-  evidence: Evidence,
-): Result.Result<CommitSummary, ProjectionError> => {
+export const projectCommit = (evidence: Evidence) => {
   if (
     evidence.filesChanged !== null &&
     (!Number.isSafeInteger(evidence.filesChanged) || evidence.filesChanged < 0)
   )
-    return Result.fail("unsafe-change-count")
+    return Result.fail<ProjectionError>("unsafe-change-count")
 
   const changedLines = safeChangedLines(evidence.additions, evidence.deletions)
 
@@ -127,7 +122,7 @@ export const projectCommit = (
   const boundedBody = truncateUtf8(message.body)
   const boundedHeadline = truncateUtf8(message.headline)
 
-  return Result.succeed({
+  return Result.succeed<CommitSummary>({
     sha: evidence.sha,
     url: evidence.url,
     repository: evidence.repository,
@@ -145,10 +140,10 @@ export const projectCommit = (
 }
 
 /** Project one decoded GitHub commit into the latest-commit response. */
-export const projectLatest = (evidence: Evidence): Result.Result<LatestCommit, ProjectionError> => {
+export const projectLatest = (evidence: Evidence) => {
   const commit = projectCommit(evidence)
 
   return Result.isFailure(commit)
     ? Result.fail(commit.failure)
-    : Result.succeed({ user: evidence.user, commit: commit.success })
+    : Result.succeed<LatestCommit>({ user: evidence.user, commit: commit.success })
 }

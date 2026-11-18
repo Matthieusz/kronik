@@ -1,5 +1,4 @@
-// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
-/* oxlint-disable effecttsgo/unstable-api-usage */
+/* oxlint-disable effecttsgo/unstable-api-usage -- Exact versions and integration tests guard unstable Effect HTTP/RPC APIs. */
 
 export * as ActivityObjectModule from "./activity-object.js"
 
@@ -66,8 +65,7 @@ export const activityRuntime = Effect.fn("ActivityObject.runtime")(function* () 
   })
 
   return yield* RpcServer.toHttpEffect(Rpcs).pipe(
-    // The Durable Object initializer is this RPC server's composition root.
-    // oxlint-disable-next-line effecttsgo/strict-effect-provide
+    // oxlint-disable-next-line effecttsgo/strict-effect-provide -- The Durable Object initializer is this RPC server's composition root.
     Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
   )
 })
@@ -77,7 +75,7 @@ export const ActivityObjectLive = ActivityObject.make(
   Effect.gen(function* () {
     const durableState = yield* DurableObjectState
     const runtimeContext = yield* RuntimeContext
-    // Cloudflare has no Durable Object deactivation hook; this instance scope owns its caches.
+    // WARNING: Cloudflare has no Durable Object deactivation hook; instance lifetime owns the caches.
     const instanceScope = yield* Scope.make()
 
     const initialized = activityRuntime().pipe(
@@ -111,8 +109,7 @@ export const ActivityObjectLive = ActivityObject.make(
       Effect.provideService(Scope.Scope, instanceScope),
     )
 
-    // The RPC Durable Object API requires the HTTP handler inside one more initializer effect.
-    // oxlint-disable-next-line effecttsgo/return-effect-in-gen
+    // oxlint-disable-next-line effecttsgo/return-effect-in-gen -- The RPC Durable Object API requires the HTTP handler inside one more initializer effect.
     return Effect.succeed(initialized)
   }),
 )

@@ -68,10 +68,10 @@ export const consoleSink: Sink = {
 }
 
 /** Emit telemetry without allowing a diagnostic sink failure to fail application work. */
-export const recordSafely = async (sink: Sink, event: Event): Promise<void> => {
+export const recordSafely = async (sink: Sink, event: Event) => {
   try {
     await sink.record(event)
   } catch {
-    // Observability is deliberately fail-open and never records the sink failure value.
+    // WARNING: Sink failures must not affect the response or leak sink error details.
   }
 }

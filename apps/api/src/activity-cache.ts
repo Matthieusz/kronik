@@ -82,8 +82,6 @@ interface Policy<A> {
   readonly retention: number
   readonly capacity: number
   readonly cacheUserNotFound: boolean
-  // Persisted values are decoded before lifecycle decisions; malformed records are discarded.
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters
   readonly decode: (value: unknown) => Option.Option<StoredRecord<A>>
 }
 
@@ -145,12 +143,12 @@ const serviceUnavailable = () =>
     status: 503,
   })
 
-const isStaleFallbackFailure = (error: GitHub.Failure): boolean =>
+const isStaleFallbackFailure = (error: GitHub.Failure) =>
   error instanceof ApiError.RateLimited ||
   error instanceof ApiError.UpstreamFailure ||
   error instanceof ApiError.ServiceUnavailable
 
-const policyForKey = (key: string): Policy<CachedValue> | undefined => {
+const policyForKey: (key: string) => Policy<CachedValue> | undefined = (key) => {
   if (key === latestPolicy.prefix) return latestPolicy
 
   if (key.startsWith(pagePolicy.prefix)) return pagePolicy
@@ -182,7 +180,7 @@ export const make = Effect.fn("ActivityCache.make")(function* (
   storage: ActivityStorage,
   loaders: Loaders,
 ) {
-  // A sweep must not delete a record that a concurrent lookup has just refreshed.
+  // WARNING: Keep cleanup and writes under the same permit or cleanup can delete a freshly written record.
   const storageLock = yield* Semaphore.make(1)
 
   const writeStored: ActivityStorage["put"] = (key, value) =>
@@ -282,7 +280,9 @@ export const make = Effect.fn("ActivityCache.make")(function* (
             Effect.tap((value) =>
               writeStored(storageKey, { kind: "success", savedAt: now, value }),
             ),
-            Effect.map((value): UserActivity.LookupResult<A> => ({ value, cacheState: "fresh" })),
+            Effect.map(
+              (value) => ({ value, cacheState: "fresh" }) satisfies UserActivity.LookupResult<A>,
+            ),
             Effect.timeout("10 seconds"),
             Effect.catchIf(Cause.isTimeoutError, () => Effect.fail(serviceUnavailable())),
           )

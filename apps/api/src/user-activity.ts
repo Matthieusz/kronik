@@ -105,7 +105,7 @@ const upstreamFailure = (detail: string) =>
     status: 502,
   })
 
-const pageKey = (request: PageRequest): string => JSON.stringify(request)
+const pageKey = (request: PageRequest) => JSON.stringify(request)
 
 const decodeActivityKey = (key: string) =>
   Effect.gen(function* () {

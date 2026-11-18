@@ -17,32 +17,32 @@ export interface CalendarDay {
 /** Pure failures produced while interpreting a contribution calendar. */
 export type Error = "malformed-calendar" | "unsafe-streak"
 
-const dateMillis = (value: IsoDate): number => Date.parse(`${value}T00:00:00Z`)
+const dateMillis = (value: IsoDate) => Date.parse(`${value}T00:00:00Z`)
 
-const makeIsoDate = (value: string): Result.Result<IsoDate, "invalid-date"> => {
+const makeIsoDate = (value: string) => {
   const result = Schema.decodeUnknownResult(IsoDate)(value)
 
-  return Result.isSuccess(result) ? Result.succeed(result.success) : Result.fail("invalid-date")
+  return Result.isSuccess(result)
+    ? Result.succeed(result.success)
+    : Result.fail<"invalid-date">("invalid-date")
 }
 
-const addDays = (value: IsoDate, days: number): Result.Result<IsoDate, "invalid-date"> => {
+const addDays = (value: IsoDate, days: number) => {
   const millis = dateMillis(value)
 
-  if (!Number.isFinite(millis)) return Result.fail("invalid-date")
+  if (!Number.isFinite(millis)) return Result.fail<"invalid-date">("invalid-date")
 
   return makeIsoDate(new Date(millis + days * DayMillis).toISOString().slice(0, 10))
 }
 
 /** Resolve the UTC range ending today and containing exactly 365 calendar dates. */
-export const resolveRange = (
-  nowMillis: number,
-): Result.Result<{ readonly from: IsoDate; readonly to: IsoDate }, "invalid-date"> => {
+export const resolveRange = (nowMillis: number) => {
   const today = makeIsoDate(new Date(nowMillis).toISOString().slice(0, 10))
 
-  if (Result.isFailure(today)) return Result.fail("invalid-date")
+  if (Result.isFailure(today)) return Result.fail<"invalid-date">("invalid-date")
   const from = addDays(today.success, -(StreakDays - 1))
 
-  if (Result.isFailure(from)) return Result.fail("invalid-date")
+  if (Result.isFailure(from)) return Result.fail<"invalid-date">("invalid-date")
 
   return Result.succeed({ from: from.success, to: today.success })
 }
@@ -52,7 +52,7 @@ export const isRepresentedRange = (
   from: IsoDate,
   to: IsoDate,
   days: ReadonlyArray<CalendarDay>,
-): boolean => {
+) => {
   const rangeSpan = (dateMillis(to) - dateMillis(from)) / DayMillis + 1
 
   if (rangeSpan !== StreakDays || days.length !== StreakDays) return false
@@ -75,8 +75,8 @@ export const calculate = (
   from: IsoDate,
   to: IsoDate,
   days: ReadonlyArray<CalendarDay>,
-): Result.Result<ContributionStreak, Error> => {
-  if (!isRepresentedRange(from, to, days)) return Result.fail("malformed-calendar")
+) => {
+  if (!isRepresentedRange(from, to, days)) return Result.fail<Error>("malformed-calendar")
 
   let longest = 0
   let run = 0
@@ -93,7 +93,7 @@ export const calculate = (
   const lastIndex = days.length - 1
   const lastDay = days[lastIndex]
 
-  if (lastDay === undefined) return Result.fail("malformed-calendar")
+  if (lastDay === undefined) return Result.fail<Error>("malformed-calendar")
   const currentStart = lastDay.contributionCount > 0 ? lastIndex : lastIndex - 1
   let current = 0
 
@@ -113,5 +113,7 @@ export const calculate = (
     active: current > 0,
   })
 
-  return Result.isSuccess(result) ? Result.succeed(result.success) : Result.fail("unsafe-streak")
+  return Result.isSuccess(result)
+    ? Result.succeed(result.success)
+    : Result.fail<Error>("unsafe-streak")
 }

@@ -49,68 +49,66 @@ export type Error =
   | "window-too-wide"
   | "unsafe-aggregate"
 
-const dateMillis = (value: typeof IsoDate.Type): number => Date.parse(`${value}T00:00:00Z`)
+const dateMillis = (value: typeof IsoDate.Type) => Date.parse(`${value}T00:00:00Z`)
 
-const makeIsoDate = (value: string): Result.Result<typeof IsoDate.Type, "invalid-date"> => {
+const makeIsoDate = (value: string) => {
   const result = Schema.decodeUnknownResult(IsoDate)(value)
 
-  return Result.isSuccess(result) ? Result.succeed(result.success) : Result.fail("invalid-date")
+  return Result.isSuccess(result)
+    ? Result.succeed(result.success)
+    : Result.fail<"invalid-date">("invalid-date")
 }
 
-const addDays = (
-  value: typeof IsoDate.Type,
-  days: number,
-): Result.Result<typeof IsoDate.Type, "invalid-date"> => {
+const addDays = (value: typeof IsoDate.Type, days: number) => {
   const millis = dateMillis(value)
 
-  if (!Number.isFinite(millis)) return Result.fail("invalid-date")
+  if (!Number.isFinite(millis)) return Result.fail<"invalid-date">("invalid-date")
 
   return makeIsoDate(new Date(millis + days * DayMillis).toISOString().slice(0, 10))
 }
 
 /** Resolve an inclusive Activity Window using an injected UTC millisecond clock value. */
-export const resolveWindow = (
-  input: WindowInput,
-  nowMillis: number,
-): Result.Result<ActivityWindow, Error> => {
+export const resolveWindow = (input: WindowInput, nowMillis: number) => {
   const hasFrom = input.from !== undefined
   const hasTo = input.to !== undefined
 
-  if (hasFrom !== hasTo) return Result.fail("window-bounds-required")
+  if (hasFrom !== hasTo) return Result.fail<Error>("window-bounds-required")
 
   if (!hasFrom && !hasTo) {
     const todayResult = makeIsoDate(new Date(nowMillis).toISOString().slice(0, 10))
 
-    if (Result.isFailure(todayResult)) return Result.fail("window-bounds-required")
+    if (Result.isFailure(todayResult)) return Result.fail<Error>("window-bounds-required")
     const fromResult = addDays(todayResult.success, -(DefaultWindowDays - 1))
 
-    if (Result.isFailure(fromResult)) return Result.fail("window-bounds-required")
+    if (Result.isFailure(fromResult)) return Result.fail<Error>("window-bounds-required")
 
-    return Result.succeed({ from: fromResult.success, to: todayResult.success })
+    return Result.succeed<ActivityWindow>({ from: fromResult.success, to: todayResult.success })
   }
 
   const from = input.from
   const to = input.to
 
-  if (from === undefined || to === undefined) return Result.fail("window-bounds-required")
+  if (from === undefined || to === undefined) return Result.fail<Error>("window-bounds-required")
   const span = (dateMillis(to) - dateMillis(from)) / DayMillis + 1
 
-  if (span < 1) return Result.fail("window-reversed")
+  if (span < 1) return Result.fail<Error>("window-reversed")
 
-  if (span > MaximumWindowDays) return Result.fail("window-too-wide")
+  if (span > MaximumWindowDays) return Result.fail<Error>("window-too-wide")
 
-  return Result.succeed({ from, to })
+  return Result.succeed<ActivityWindow>({ from, to })
 }
 
-const addSafe = (left: number, right: number): Result.Result<number, "unsafe-aggregate"> => {
+const addSafe = (left: number, right: number) => {
   if (!Number.isSafeInteger(left) || !Number.isSafeInteger(right))
-    return Result.fail("unsafe-aggregate")
+    return Result.fail<"unsafe-aggregate">("unsafe-aggregate")
   const result = left + right
 
-  return Number.isSafeInteger(result) ? Result.succeed(result) : Result.fail("unsafe-aggregate")
+  return Number.isSafeInteger(result)
+    ? Result.succeed(result)
+    : Result.fail<"unsafe-aggregate">("unsafe-aggregate")
 }
 
-const sumSafe = (values: ReadonlyArray<number>): Result.Result<number, "unsafe-aggregate"> => {
+const sumSafe = (values: ReadonlyArray<number>) => {
   let result = 0
 
   for (const value of values) {
@@ -123,12 +121,7 @@ const sumSafe = (values: ReadonlyArray<number>): Result.Result<number, "unsafe-a
   return Result.succeed(result)
 }
 
-const projectLanguages = (
-  repositories: ReadonlyArray<RepositoryLanguages>,
-): Result.Result<
-  { readonly languages: ReadonlyArray<Language>; readonly otherBytes: number },
-  Error
-> => {
+const projectLanguages = (repositories: ReadonlyArray<RepositoryLanguages>) => {
   const totals = new Map<string, number>()
   const seenRepositories = new Set<string>()
 
@@ -159,7 +152,10 @@ const projectLanguages = (
 
   if (Result.isFailure(totalBytes)) return Result.fail(totalBytes.failure)
 
-  return Result.succeed({
+  return Result.succeed<{
+    readonly languages: ReadonlyArray<Language>
+    readonly otherBytes: number
+  }>({
     languages: listed.map(([name, bytes]) => ({
       name,
       color: null,
@@ -171,11 +167,9 @@ const projectLanguages = (
 }
 
 /** Project bounded GitHub evidence into the truthful Activity Summary contract. */
-export const summarize = (
-  window: ActivityWindow,
-  evidence: Evidence,
-): Result.Result<ActivitySummary, Error> => {
-  if (evidence.items.length > MaximumAggregatedCommits) return Result.fail("unsafe-aggregate")
+export const summarize = (window: ActivityWindow, evidence: Evidence) => {
+  if (evidence.items.length > MaximumAggregatedCommits)
+    return Result.fail<"unsafe-aggregate">("unsafe-aggregate")
 
   let additions = 0
   let deletions = 0
@@ -184,7 +178,7 @@ export const summarize = (
   for (const item of evidence.items) {
     const projected = CommitDomain.projectCommit(item)
 
-    if (Result.isFailure(projected)) return Result.fail("unsafe-aggregate")
+    if (Result.isFailure(projected)) return Result.fail<"unsafe-aggregate">("unsafe-aggregate")
     const nextAdditions = addSafe(additions, projected.success.additions)
     const nextDeletions = addSafe(deletions, projected.success.deletions)
     const nextChangedLines = addSafe(changedLines, projected.success.changedLines)
@@ -194,7 +188,7 @@ export const summarize = (
       Result.isFailure(nextDeletions) ||
       Result.isFailure(nextChangedLines)
     )
-      return Result.fail("unsafe-aggregate")
+      return Result.fail<"unsafe-aggregate">("unsafe-aggregate")
     additions = nextAdditions.success
     deletions = nextDeletions.success
     changedLines = nextChangedLines.success
@@ -210,10 +204,10 @@ export const summarize = (
     matchedCommits < 0 ||
     matchedCommits < evidence.items.length
   ) {
-    return Result.fail("unsafe-aggregate")
+    return Result.fail<"unsafe-aggregate">("unsafe-aggregate")
   }
 
-  return Result.succeed({
+  return Result.succeed<ActivitySummary>({
     user: evidence.user,
     window,
     coverage: {

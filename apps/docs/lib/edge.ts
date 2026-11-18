@@ -11,7 +11,7 @@ export interface GatewayBindings {
 }
 
 /** Serve documentation assets or forward /api requests with the prefix removed. */
-export const gatewayResponse = (request: Request, bindings: GatewayBindings): Promise<Response> => {
+export const gatewayResponse = (request: Request, bindings: GatewayBindings) => {
   const url = new URL(request.url)
 
   if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {

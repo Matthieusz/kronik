@@ -1,5 +1,4 @@
-// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
-/* oxlint-disable effecttsgo/unstable-api-usage */
+/* oxlint-disable effecttsgo/unstable-api-usage -- Exact versions and integration tests guard unstable Effect HTTP/RPC APIs. */
 
 export * as GitHub from "./github.js"
 
@@ -122,12 +121,10 @@ const LanguageBatchResponse = Schema.Record(
   ),
 )
 
-/** Bound query complexity independently of the number of selected commits. */
 const GraphqlBatchSize = 20
 
 const HydrationConcurrency = 3
 
-/** Fail explicitly rather than return truncated parent or language connections. */
 const MaximumConnectionPages = 10
 
 const repositoryParts = (nameWithOwner: string) => {
@@ -262,7 +259,7 @@ export class CredentialRejected extends Schema.TaggedError<
 /** Failures exposed by the GitHub adapter before public problem projection. */
 export type Failure = ApiError.DomainErrors | CredentialRejected
 
-const classifyProviderFailure = (failure: ProviderFailure): Failure => {
+const classifyProviderFailure = (failure: ProviderFailure) => {
   const instance = "urn:kronik:github"
 
   const common = {
@@ -319,7 +316,7 @@ const retrySchedule = Schedule.exponential("100 millis").pipe(
 
 const silentObservability: Observability.Sink = { record: () => undefined }
 
-const safeHeaderInteger = (value: string | undefined): number | undefined => {
+const safeHeaderInteger = (value: string | undefined) => {
   if (value === undefined) return undefined
   const parsed = Number.parseInt(value, 10)
 

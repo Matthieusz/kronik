@@ -8,15 +8,13 @@ import KronikApiLive from "./alchemy-runtime.worker.js"
 export default Stack(
   "KronikRuntimeVerification",
   { providers: providers(), state: localState() },
-  // SAFETY: Effect beta.103 retains already-provided Durable Object services in this Layer's type.
-  // @ts-expect-error -- the initialized Worker test proves the complete Layer is provided at runtime.
+  // @ts-expect-error -- SAFETY: Effect beta.103 retains already-provided Durable Object services in this Layer's type. the initialized Worker test proves the complete Layer is provided at runtime.
   Effect.gen(function* () {
     const api = yield* KronikApi
 
     return { api: api.url }
   }).pipe(
-    // This fixture stack is the initialized Worker's local composition root.
-    // oxlint-disable-next-line effecttsgo/strict-effect-provide
+    // oxlint-disable-next-line effecttsgo/strict-effect-provide -- This fixture stack is the initialized Worker's local composition root.
     Effect.provide(KronikApiLive),
   ),
 )

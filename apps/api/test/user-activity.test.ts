@@ -47,7 +47,7 @@ const unused = () => Effect.die("Unexpected GitHub lookup")
 
 const now = Date.parse("2026-01-01T12:00:00Z")
 
-const makeStorage = (): ActivityStorage => {
+const makeStorage = () => {
   const values = new Map<string, unknown>()
 
   return {
@@ -65,7 +65,7 @@ const makeStorage = (): ActivityStorage => {
     put: (key, value) => Effect.sync(() => void values.set(key, value)),
     delete: (key) => Effect.sync(() => values.delete(key)),
     deleteMany: (keys) => Effect.sync(() => keys.filter((key) => values.delete(key)).length),
-  }
+  } satisfies ActivityStorage
 }
 
 describe("Requested User lookup module", () => {

@@ -1,6 +1,5 @@
 import { batchFixture, commitFixture, readGraphqlRequest } from "./support/github-graphql.js"
-// Effect's HTTP/RPC adapters remain unstable in v4; exact versions and integration tests guard upgrades.
-/* oxlint-disable effecttsgo/unstable-api-usage */
+/* oxlint-disable effecttsgo/unstable-api-usage -- Exact versions and integration tests guard unstable Effect HTTP/RPC APIs. */
 
 /* oxlint-disable effecttsgo/strict-effect-provide */
 
@@ -79,7 +78,7 @@ const runtimeContext: RuntimeContext["Service"] = {
   set: (id: string) => Effect.succeed(id),
 }
 
-const dateAt = (start: string, index: number): string =>
+const dateAt = (start: string, index: number) =>
   new Date(Date.parse(`${start}T00:00:00Z`) + index * 86_400_000).toISOString().slice(0, 10)
 
 const contributionDays = Array.from({ length: 365 }, (_, index) => ({
@@ -110,7 +109,7 @@ interface FakeGitHub {
   readonly introduceCommit: () => void
 }
 
-const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
+const makeFakeGitHub = (totalCount = 20) => {
   let mode:
     | "normal"
     | "user-not-found"
@@ -279,7 +278,7 @@ const makeFakeGitHub = (totalCount = 20): FakeGitHub => {
     introduceCommit() {
       introduced = true
     },
-  }
+  } satisfies FakeGitHub
 }
 
 type TestStorage = ActivityObjectState["storage"] & {
@@ -288,7 +287,7 @@ type TestStorage = ActivityObjectState["storage"] & {
   readonly value: (key: string) => Schema.Json
 }
 
-const makeStorage = (): TestStorage => {
+const makeStorage = () => {
   const values = new Map<string, unknown>()
 
   return {
@@ -309,7 +308,7 @@ const makeStorage = (): TestStorage => {
     seed: (key, value) => void values.set(key, value),
     keys: () => [...values.keys()],
     value: (key) => Schema.decodeUnknownSync(Schema.Json)(values.get(key)),
-  }
+  } satisfies TestStorage
 }
 
 type ActivityClient = Effect.Success<ReturnType<ActivityRpcClient.ActivityNamespace["getByName"]>>
@@ -393,20 +392,19 @@ const makeCoordinatorImpl = Effect.fn("RuntimeTest.makeCoordinator")(function* (
     client,
     replace: replace().pipe(Effect.provide(Layer.succeed(Clock.Clock, clock))),
     storage,
-  }
+  } satisfies Coordinator
 })
 
 const makeCoordinator = (
   objectName: string,
   fakeGitHub: FakeGitHub,
   storage: TestStorage = makeStorage(),
-): Effect.Effect<Coordinator, never, Clock.Clock | Scope.Scope> =>
+) =>
   makeCoordinatorImpl(objectName, fakeGitHub, storage).pipe(
     Effect.provide(Layer.succeed(Clock.Clock, clock)),
   )
 
-const runJson = (response: Response): Effect.Effect<unknown> =>
-  Effect.promise(() => response.json())
+const runJson = (response: Response) => Effect.promise<unknown>(() => response.json())
 
 const makeWebWithNamespace = (namespace: ActivityRpcClient.ActivityNamespace) =>
   Effect.gen(function* () {
@@ -420,8 +418,7 @@ const makeWebWithNamespace = (namespace: ActivityRpcClient.ActivityNamespace) =>
 const clockContext = Context.make(Clock.Clock, clock)
 
 const runWithTestClock = <A>(effect: Effect.Effect<A, never, Clock.Clock>) => {
-  // SAFETY: Effect's Clock.Reference uses a default-service identity that beta.103 does not subtract from `R`.
-  // @ts-expect-error -- the supplied context provides the only remaining service at this test composition root.
+  // @ts-expect-error -- SAFETY: Effect's Clock.Reference uses a default-service identity that beta.103 does not subtract from `R`. the supplied context provides the only remaining service at this test composition root.
   return Effect.runPromise(Effect.provideContext(effect, clockContext))
 }
 
@@ -1150,8 +1147,7 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
                 return entries
               }),
             put: (key, value) => {
-              // Signal effect construction, before the lifecycle acquires its write permit.
-              // Waiting inside the put effect would deadlock behind the paused sweep.
+              // WARNING: Signal when constructing the put effect; signaling inside it deadlocks behind the paused sweep.
               if (refreshing && key === "latest-commit-v1")
                 Deferred.doneUnsafe(writeRequested, Effect.void)
 
@@ -1193,7 +1189,6 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
           ).pipe(Effect.forkScoped)
 
           yield* Deferred.await(refreshStarted)
-          // The old success expires while its replacement is still being fetched.
           currentTime = fixedNow + 3_600_001
           pauseSweep = true
 
@@ -1204,14 +1199,12 @@ describe("complete local Worker/RPC/Durable Object runtime", () => {
           yield* Deferred.await(sweepListed)
           yield* Deferred.succeed(allowRefresh, undefined)
           yield* Deferred.await(writeRequested)
-          // Let the writer run until it completes or suspends on the sweep's permit.
           yield* Effect.yieldNow
           yield* Deferred.succeed(allowSweep, undefined)
 
           const refreshed = yield* Fiber.join(refresh)
           const swept = yield* Fiber.join(sweep)
 
-          // A new object must still be able to recover the refreshed persisted success.
           refreshing = false
           yield* mixed.replace
           baseGitHub.setMode("rate")
@@ -1622,8 +1615,7 @@ test.skipIf(Bun.env.KRONIK_LIVE_GITHUB !== "1" || Bun.env.GITHUB_TOKEN === undef
                 githubBaseUrl: new URL("https://api.github.com"),
               }),
             ),
-            // Same pinned HTTP adapter as the production composition root.
-            // oxlint-disable-next-line effecttsgo/unstable-api-usage
+            // oxlint-disable-next-line effecttsgo/unstable-api-usage -- Same pinned HTTP adapter as the production composition root.
             Layer.provide(FetchHttpClient.layer),
           ),
         ),

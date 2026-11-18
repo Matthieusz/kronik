@@ -65,13 +65,13 @@ const invalidCursor = () =>
     status: 400,
   })
 
-const encodeBase64Url = (bytes: Uint8Array): string =>
+const encodeBase64Url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/, "")
 
-const decodeBase64Url = (value: string): Uint8Array => {
+const decodeBase64Url = (value: string) => {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("invalid base64url")
   const padded = value.replaceAll("-", "+").replaceAll("_", "/")
   const padding = (4 - (padded.length % 4)) % 4
@@ -80,10 +80,9 @@ const decodeBase64Url = (value: string): Uint8Array => {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0))
 }
 
-const payloadBytes = (payload: Payload): Uint8Array =>
-  new TextEncoder().encode(JSON.stringify(payload))
+const payloadBytes = (payload: Payload) => new TextEncoder().encode(JSON.stringify(payload))
 
-const asArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
+const asArrayBuffer = (bytes: Uint8Array) => {
   const buffer = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(buffer).set(bytes)
 

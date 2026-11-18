@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { makeWebHandler } from "../src/http.js"
 import { UserActivity } from "../src/user-activity.js"
 
-const problem = (kind: string): ApiError.DomainErrors => {
+const problem = (kind: string) => {
   if (kind === "InvalidRequest")
     return new ApiError.InvalidRequest({
       type: "https://kronik.dev/problems/invalid-request",
@@ -69,12 +69,13 @@ const problem = (kind: string): ApiError.DomainErrors => {
   })
 }
 
-const failingService = (error: ApiError.DomainErrors): UserActivity.CacheAwareInterface => ({
-  latestCommit: () => Effect.fail(error),
-  commits: () => Effect.fail(error),
-  summarize: () => Effect.fail(error),
-  streak: () => Effect.fail(error),
-})
+const failingService = (error: ApiError.DomainErrors) =>
+  ({
+    latestCommit: () => Effect.fail(error),
+    commits: () => Effect.fail(error),
+    summarize: () => Effect.fail(error),
+    streak: () => Effect.fail(error),
+  }) satisfies UserActivity.CacheAwareInterface
 
 const routes = ["commits/latest", "commits", "activity", "streak"] as const
 
